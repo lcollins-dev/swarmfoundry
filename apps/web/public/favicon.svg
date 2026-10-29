@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="11 8.5 104 104" fill="none">
+  <defs>
+    <linearGradient id="anvil" x1="14" y1="10" x2="114" y2="106" gradientUnits="userSpaceOnUse">
+      <stop offset="0.3" stop-color="#d19a66" />
+      <stop offset="0.7" stop-color="#e06c75" />
+    </linearGradient>
+  </defs>
+  <path d="M16 70H110v10a8 8 0 0 1-8 8H88l8 18H32l8-18H36C28 88 18 82.6 16 70z" stroke="url(#anvil)" stroke-width="10" stroke-linejoin="round" />
+  <path d="M43 29V21" stroke="#e5c07b" stroke-width="6" stroke-linecap="round" />
+  <circle cx="43" cy="16" r="6" fill="#e5c07b" />
+  <circle cx="43" cy="45" r="16" fill="#d19a66" />
+  <rect x="35" y="39" width="5" height="12" rx="2.5" fill="#f3f4f6" />
+  <rect x="45.5" y="39" width="5" height="12" rx="2.5" fill="#f3f4f6" />
+  <path d="M83 29V21" stroke="#e5c07b" stroke-width="6" stroke-linecap="round" />
+  <circle cx="83" cy="16" r="6" fill="#e5c07b" />
+  <circle cx="83" cy="45" r="16" fill="#e06c75" />
+  <rect x="75" y="39" width="5" height="12" rx="2.5" fill="#f3f4f6" />
+  <rect x="85.5" y="39" width="5" height="12" rx="2.5" fill="#f3f4f6" />
+</svg>

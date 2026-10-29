@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "src",
+  "entryFile": "main",
+  "compilerOptions": {
+    "assets": [
+      "core/runner/agent-entrypoint.sh",
+      "core/runner/command-limit.sh",
+      "core/runner/command-watchdog.sh",
+      "core/runner/runner-system-prompt.md"
+    ],
+    "watchAssets": true
+  }
+}

@@ -1,0 +1,24 @@
+# Project
+/dist
+/node_modules
+
+# The config repo's clone, SWARMFOUNDRY_CONFIG_CLONE_DIR
+/config-repo
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# OS
+.DS_Store
+
+# Tests
+/coverage
+/.nyc_output
+
+development.env

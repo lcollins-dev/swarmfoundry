@@ -1,0 +1,97 @@
+# Paths resolve relative to this file. ${VAR} uses the orchestrator's environment or a .env beside this file.
+
+sources:
+  gitlab-local:
+    type: gitlab
+    url: https://gitlab.example.com # replace this host, the project and usernames with your own
+    token: ${GITLAB_TOKEN} # the orchestrator's token, for polling, labels and comments
+    pollInterval: 60s
+    projects: [group/project]
+
+agents:
+  claude-subscription:
+    type: claude
+    auth: oauth # oauth | apiKey
+    token: ${CLAUDE_CODE_OAUTH_TOKEN}
+    model: claude-opus-5-5
+    settings: ./agents/claude/settings.json
+    instructions: ./agents/claude/instructions.md # loaded as managed CLAUDE.md alongside the project's own
+
+  claude-api:
+    type: claude
+    auth: apiKey
+    token: ${ANTHROPIC_API_KEY}
+    model: claude-sonnet-5-5
+    settings: ./agents/claude/settings.json
+    instructions: ./agents/claude/instructions.md
+
+environments:
+  node-postgres:
+    image: ${AGENT_IMAGE} # built by Compose from agent/Dockerfile
+    agent: { name: claude-subscription } # the default for agent steps in this sandbox
+    env:
+      GITLAB_TOKEN: ${GITLAB_BOT_TOKEN} # the bot's token, to clone, push and open MRs
+      GITLAB_HOST: gitlab.example.com
+      MR_REVIEWER: maintainer # the implement prompt assigns merge requests to this user
+    mounts: # read-only unless marked
+      - { source: /srv/swarmfoundry/cache/npm, target: /home/node/.npm, readOnly: false }
+    services: # sidecars on a private network per run
+      postgres:
+        image: postgres:17
+        env: { POSTGRES_PASSWORD: postgres }
+    resources: { cpus: 4, memory: 8g }
+
+# x- keys are discarded after parsing. A trigger's own list replaces the inherited list.
+x-trigger: &trigger
+  source: gitlab-local
+  failureSteps: # run after terminal run failures; report first because a failing step skips the rest
+    - comment: '{{failure.report}}'
+    - relabel: { add: [foundry::failed], remove: [foundry::running] }
+x-agent: &agent
+  environment: node-postgres
+
+triggers:
+  implement:
+    <<: *trigger
+    steps:
+      - relabel: { add: [workflow::in-progress, foundry::running], remove: [workflow::ready] }
+      - agent:
+          <<: *agent
+          systemPrompt: ./prompts/implement.system.md
+          prompt: ./prompts/implement.md
+          timeout: 60m
+      - relabel: { remove: [foundry::running] }
+    concurrency: 1 # prevents concurrent implementation runs on the same branch
+    issue:
+      labels: [workflow::ready]
+      notLabels: [foundry::failed, foundry::needs-human, workflow::review, workflow::approved]
+      anyAssignee: [swarmfoundry-bot]
+      expect: { anyLabel: [workflow::review, foundry::needs-human] } # any listed label satisfies this check
+
+  review:
+    <<: *trigger
+    steps:
+      - relabel: { add: [foundry::running] }
+      - agent:
+          <<: *agent
+          agent: # overrides the environment's agent; unspecified fields come from the named agent
+            name: claude-api
+            model: claude-opus-5-5
+            settings: ./agents/claude/review-settings.json # denies pushing
+          systemPrompt: ./prompts/review.system.md
+          prompt: ./prompts/review.md
+          timeout: 30m
+      - relabel: { remove: [foundry::running] }
+    concurrency: 2
+    issue:
+      labels: [workflow::review]
+      notLabels: [foundry::failed, foundry::needs-human, workflow::ready, workflow::in-progress, workflow::approved]
+      anyAssignee: [swarmfoundry-bot] # issues without the bot assigned stay with a person for review
+      expect: { anyLabel: [workflow::approved, workflow::ready, workflow::in-progress, foundry::needs-human] }
+
+  merged:
+    source: gitlab-local
+    steps: # static steps act on the MR's issue, with the source's token and no sandbox
+      - relabel: { add: [workflow::merged], remove: [workflow::approved, workflow::review, foundry::needs-human] }
+      - comment: 'Merged in !{{mergeRequest.iid}}.'
+    mergeRequest: { event: merged, targetBranch: main }

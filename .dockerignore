@@ -1,0 +1,11 @@
+**/dist
+**/node_modules
+.git
+.workdir
+.playwright-mcp
+apps/api/development.env
+**/.env
+
+# The build installs the e2e workspace's manifest only.
+e2e/*
+!e2e/package.json

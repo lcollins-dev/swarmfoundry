@@ -1,0 +1,7 @@
+{
+  "extraKnownMarketplaces": {},
+  "enabledPlugins": {},
+  "permissions": {
+    "deny": ["Bash(git push)", "Bash(git push *)", "Bash(glab mr merge *)", "Bash(glab mr update *)"]
+  }
+}

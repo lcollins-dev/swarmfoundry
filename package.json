@@ -1,0 +1,56 @@
+{
+  "name": "swarmfoundry",
+  "version": "0.0.0",
+  "author": "Louis Collins",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "scripts": {
+    "build": "npm run build:libs && npm run build:api && npm run build:web",
+    "build:libs": "tsc --build --clean && tsc --build",
+    "build:api": "npm run build -w apps/api",
+    "build:web": "npm run build -w apps/web",
+    "start:web": "npm start -w apps/web",
+    "start:api": "npm start -w apps/api",
+    "db:clean": "npm run db:clean -w apps/api",
+    "test": "npm run test --workspaces --if-present",
+    "test:integration": "npm run test:integration -w apps/api",
+    "test:e2e": "npm run test:e2e -w e2e",
+    "code:format": "npm run code:format --workspaces --if-present",
+    "code:format:check": "npm run code:format:check --workspaces --if-present",
+    "code:lint": "npm run code:lint --workspaces --if-present",
+    "code:lint:fix": "npm run code:lint:fix --workspaces --if-present",
+    "code:typecheck": "tsc --build --force && npm run code:typecheck --workspaces --if-present",
+    "code:check": "npm run code:format:check && npm run code:lint && npm run code:typecheck && npm test",
+    "docker:build": "docker build --build-arg='APP_VERSION=dev' -t ghcr.io/lcollins-dev/swarmfoundry:dev -f build/Dockerfile .",
+    "compose:up": "cd resources/compose && docker compose up -d --build",
+    "compose:logs": "cd resources/compose && docker compose logs -f",
+    "compose:ps": "cd resources/compose && docker compose ps",
+    "compose:down": "cd resources/compose && docker compose down",
+    "compose:reset": "cd resources/compose && docker compose down -v",
+    "instance:start": "bash resources/instanced/start-all.sh",
+    "instance:stop": "bash resources/instanced/stop.sh",
+    "instance:db:clean": "bash resources/instanced/clean.sh",
+    "instance:db:sql": "bash resources/instanced/db-sql.sh",
+    "npm:clean": "rm -rf node_modules && npm run npm:clean --workspaces"
+  },
+  "workspaces": [
+    "apps/api",
+    "apps/web",
+    "libs/dto",
+    "e2e"
+  ],
+  "devDependencies": {
+    "@eslint/js": "9.39.2",
+    "@trivago/prettier-plugin-sort-imports": "6.0.0",
+    "eslint": "9.39.2",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "16.5.0",
+    "prettier": "3.7.4",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.50.0",
+    "vitest": "4.1.12"
+  },
+  "overrides": {
+    "multer": "2.5.0"
+  }
+}

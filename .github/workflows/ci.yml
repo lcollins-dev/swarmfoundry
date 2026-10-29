@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  # A pull request is checked as its own event, so a push to its branch would only run CI twice.
+  push:
+    branches: [master]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # Only a pull request's superseded run is cancelled, so every commit on master keeps a result.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: Format, lint and typecheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # The workspaces import the libs through their build output.
+      - run: npm run build:libs
+
+      - run: npm run code:format:check
+
+      - run: npm run code:lint
+
+      - run: npm run code:typecheck
+
+  audit:
+    name: Audit dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      # Production dependencies only, at any severity. Dev tooling never ships in the app image.
+      - run: npm audit --omit=dev
+
+  test:
+    name: Unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build:libs
+
+      - run: npm test
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17.7-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        # The job waits for this to pass before its steps start. It must dial TCP: the image's
+        # first-run setup starts a temporary server on the unix socket alone, and the suite's global
+        # setup connects the moment the job begins.
+        options: >-
+          --health-cmd "pg_isready -h localhost -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      # The suite creates and drops its own database, so it connects as the superuser
+      # rather than expecting the swarmfoundry role the dev container provisions.
+      TYPEORM_HOST: localhost
+      TYPEORM_PORT: '5432'
+      TYPEORM_USERNAME: postgres
+      TYPEORM_PASSWORD: postgres
+      TYPEORM_DATABASE: swarmfoundry_int
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build:libs
+
+      - run: npx vitest run --config vitest.integration.config.ts
+        working-directory: apps/api
+        env:
+          INTEGRATION_SERIAL: '0'
+
+      # Serial specs own their app, so they get a second process-isolated pass.
+      - run: npx vitest run --config vitest.integration.config.ts --passWithNoTests
+        working-directory: apps/api
+        env:
+          INTEGRATION_SERIAL: '1'
