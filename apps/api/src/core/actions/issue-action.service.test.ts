@@ -10,23 +10,32 @@ import { PromptTemplateService } from '@/core/foundry-config/prompt-template.ser
 import type { IssueSourceService } from '@/core/issue-source/issue-source.service';
 import type { TaskService } from '@/core/task/task.service';
 
-import type { IStepRequest } from './actions.types';
+import type { IStepRequest } from './types/actions.types';
 import type {
   ICommentStepConfig,
   IPromptContext,
   IStaticStepConfig,
   ITriggerConfig,
-} from '@/core/foundry-config/foundry-config.types';
+} from '@/core/foundry-config/types/foundry-config.types';
 import { GitLabApiError, GitLabUnknownUserError } from '@/core/issue-source/gitlab-api.error';
-import { DeploymentFault, RunOutcome, StepList } from '@/core/task/task.types';
+import { DeploymentFault, RunOutcome, StepList } from '@/core/task/types/task.types';
 
 const SOURCE_TOKEN = 'glpat-orchestrator-token';
 
 const source = { name: 'gitlab', token: SOURCE_TOKEN };
 const trigger = { name: 'merged', source } as unknown as ITriggerConfig;
 
-const RELABEL: IStaticStepConfig = { kind: 'relabel', add: ['workflow::test'], remove: ['workflow::review'] };
-const ASSIGN: IStaticStepConfig = { kind: 'assign', usernames: ['ada', 'swarmfoundry-bot'] };
+const RELABEL: IStaticStepConfig = {
+  kind: 'relabel',
+  add: ['workflow::test'],
+  remove: ['workflow::review'],
+  written: { add: ['workflow::test'], remove: ['workflow::review'] },
+};
+const ASSIGN: IStaticStepConfig = {
+  kind: 'assign',
+  usernames: ['ada', 'swarmfoundry-bot'],
+  written: { usernames: ['ada', 'swarmfoundry-bot'] },
+};
 
 const mergeRequest = {
   iid: 5,
@@ -136,10 +145,8 @@ describe('IssueActionService', () => {
   });
 
   it('comments the rendered body, with the failure variables, escaping a value that would run a quick action', async () => {
-    const step: IStaticStepConfig = {
-      kind: 'comment',
-      body: '{{mergeRequest.title}}\nMerged in !{{mergeRequest.iid}} for #{{issue.iid}}. {{failure.reason}}',
-    };
+    const body = '{{mergeRequest.title}}\nMerged in !{{mergeRequest.iid}} for #{{issue.iid}}. {{failure.reason}}';
+    const step: IStaticStepConfig = { kind: 'comment', body, written: { body } };
     const failure = { report: 'It failed.', reason: '` exit 1 `' };
 
     await expect(service.run(request(step, taskWith(3), { failure }))).resolves.toMatchObject({
@@ -157,7 +164,9 @@ describe('IssueActionService', () => {
   });
 
   it('redacts the rendered comment', async () => {
-    await service.run(request({ kind: 'comment', body: `Token ${SOURCE_TOKEN}` }));
+    await service.run(
+      request({ kind: 'comment', body: `Token ${SOURCE_TOKEN}`, written: { body: `Token ${SOURCE_TOKEN}` } })
+    );
 
     expect(comment.mock.calls[0][3]).toBe('Token [redacted]');
   });
@@ -228,7 +237,9 @@ describe('IssueActionService', () => {
   });
 
   it('fails a comment that renders the failure when the failure could not be read, posting nothing', async () => {
-    await expect(service.run(request({ kind: 'comment', body: '{{failure.report}}' }))).resolves.toEqual({
+    await expect(
+      service.run(request({ kind: 'comment', body: '{{failure.report}}', written: { body: '{{failure.report}}' } }))
+    ).resolves.toEqual({
       exitCode: null,
       result: null,
       error:

@@ -1,6 +1,7 @@
 import {
-  CreateUserResponseDto,
-  type CreateUserRequestDto,
+  InviteUserResponseDto,
+  PasswordLinkDto,
+  type InviteUserRequestDto,
   type UpdateStateRequestDto,
   type UpdateUserRequestDto,
   type UserListRequestDto,
@@ -68,12 +69,15 @@ export const useUserAdminService = () => {
     return stats;
   }
 
-  async function createUser(createUserRequest: CreateUserRequestDto, form: string | null = null): Promise<number> {
-    const userId = await apiService
-      .makeRequest(`admin/user`, RequestType.POST, {
-        response: CreateUserResponseDto,
+  async function inviteUser(
+    inviteUserRequest: InviteUserRequestDto,
+    form: string | null = null
+  ): Promise<InviteUserResponseDto> {
+    const inviteUserResponse = await apiService
+      .makeRequest('admin/user/invite', RequestType.POST, {
+        response: InviteUserResponseDto,
         token: userStore.token,
-        body: createUserRequest,
+        body: inviteUserRequest,
         form,
       })
       .finally(() => errorService.clearValidationError())
@@ -81,7 +85,7 @@ export const useUserAdminService = () => {
 
     notificationStore.clearAllNotifications();
 
-    return userId;
+    return inviteUserResponse;
   }
 
   async function getUser(userId: number, form: string | null = null): Promise<UserDto> {
@@ -142,11 +146,25 @@ export const useUserAdminService = () => {
     notificationStore.clearAllNotifications();
   }
 
+  async function createPasswordLink(userId: number): Promise<PasswordLinkDto> {
+    const passwordLink = await apiService
+      .makeRequest(`admin/user/${userId}/password-link`, RequestType.POST, {
+        response: PasswordLinkDto,
+        token: userStore.token,
+      })
+      .catch((error: unknown) => errorService.handleError(error));
+
+    notificationStore.clearAllNotifications();
+
+    return passwordLink;
+  }
+
   return {
     getRoleList,
     getUserList,
     getUserStats,
-    createUser,
+    inviteUser,
+    createPasswordLink,
     getUser,
     updateUser,
     updateState,

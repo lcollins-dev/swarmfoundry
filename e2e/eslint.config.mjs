@@ -11,7 +11,7 @@ export default defineConfig([
     },
 
     rules: {
-      // The whole workspace is test code, where AGENTS.md permits these.
+      // The whole workspace is test code, which may use short names and type and non-null assertions.
       'id-length': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/consistent-type-assertions': 'off',

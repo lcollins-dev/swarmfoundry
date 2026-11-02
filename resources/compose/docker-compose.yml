@@ -1,7 +1,4 @@
-# Deploys Swarmfoundry with the config in config/, or SWARMFOUNDRY_CONFIG_DIR, with DEPLOYMENT.md at the repository root
-# as its runbook. Copy this folder as a deploy repo and replace config/ with your own. Each ${VAR} comes from .env beside
-# this file, copied from .env.tpl, and the app gets the whole of .env, so the config's own ${VAR}s resolve.
-# SWARMFOUNDRY_VERSION picks the release the app runs. `dev` runs the image that `npm run docker:build` tags locally.
+# Copy this folder and replace config/ with your own. Fill .env from .env.tpl. See DEPLOYMENT.md.
 name: swarmfoundry
 
 services:
@@ -9,7 +6,7 @@ services:
     image: ghcr.io/lcollins-dev/swarmfoundry:${SWARMFOUNDRY_VERSION:?set it in .env}
     hostname: app
     restart: always
-    # Loopback only. Nothing needs to reach the orchestrator, and agents can reach every port the host publishes.
+    # Loopback only, since agents can reach every port the host publishes.
     ports:
       - 127.0.0.1:${APP_PORT:-8080}:3000
     depends_on:
@@ -26,25 +23,20 @@ services:
       AGENT_IMAGE: swarmfoundry-agent:${SWARMFOUNDRY_VERSION}
       SANDBOX_NAMESPACE: ${SANDBOX_NAMESPACE:-swarmfoundry}
       USER_TOKEN_SECRET: ${USER_TOKEN_SECRET:?set it in .env}
-    # The image runs as the non-root `node` user, which reaches the socket through the socket's group.
     group_add:
       - ${DOCKER_GID:?set it in .env to the group id of /var/run/docker.sock}
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    # The socket makes this container root-equivalent on the host. The config is read-only, and the runner copies what
-    # it needs into each sandbox. With SWARMFOUNDRY_CONFIG_REPO set, the config loads from the repo's clone instead,
-    # kept on its own volume so a restart can start on the last good revision.
+    # The socket makes this container root-equivalent on the host.
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${SWARMFOUNDRY_CONFIG_DIR:-./config}:/etc/swarmfoundry:ro
       - config-repo:/var/lib/swarmfoundry/config-repo
 
-  # Builds the agent image from agent/Dockerfile in the config directory, and exits once the image shows it holds the
-  # Claude CLI. The runner finds the built tag locally, so it never pulls. The app gets the tag as AGENT_IMAGE, for the
-  # config to name.
+  # Builds the agent image, then exits.
   agent-image:
     build:
-      context: ${SWARMFOUNDRY_CONFIG_DIR:-./config}/agent
+      context: ./agent
     image: swarmfoundry-agent:${SWARMFOUNDRY_VERSION}
     entrypoint: [claude, --version]
     network_mode: none
@@ -57,8 +49,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    # A first connection that arrives before Postgres is serving takes the app down with it, since the retry rebuilds a
-    # data source the transactional wrapper holds. Over TCP, so the server init-db.sh runs under does not count.
+    # Over TCP, so the temporary server init-db.sh runs under does not pass.
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -h localhost -U postgres']
       interval: 2s

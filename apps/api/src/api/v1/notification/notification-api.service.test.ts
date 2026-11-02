@@ -71,7 +71,7 @@ describe('NotificationApiService', () => {
           notificationType: buildNotificationType({
             name: 'Import finished',
             severity: NotificationSeverity.SUCCESS,
-            pageUrl: '/admin/users',
+            pageUrl: '/users',
           }),
         }),
       ]);
@@ -86,7 +86,7 @@ describe('NotificationApiService', () => {
               id: EXAMPLE_TYPE_ID,
               name: 'Import finished',
               severity: NotificationSeverity.SUCCESS,
-              pageUrl: '/admin/users',
+              pageUrl: '/users',
             },
             desc: 'Something happened',
             createdDate: new Date('2026-05-15T12:00:00Z'),

@@ -7,16 +7,16 @@ import { FoundryConfigService } from '@/core/foundry-config/foundry-config.servi
 import { IssueSourceService } from '@/core/issue-source/issue-source.service';
 import { TaskService } from '@/core/task/task.service';
 
-import type { TaskCheck } from './trigger-engine.types';
+import type { TaskCheck } from './types/trigger-engine.types';
 import type {
   IMergeRequestTriggerConfig,
   ITriggerConfig,
   TriggerKind,
-} from '@/core/foundry-config/foundry-config.types';
-import { triggerKindOf } from '@/core/foundry-config/trigger-kind';
-import type { IIssueState, IRequestLimits } from '@/core/issue-source/issue-source.types';
-import { taskKindOf } from '@/core/task/task-kind';
-import { StepList } from '@/core/task/task.types';
+} from '@/core/foundry-config/types/foundry-config.types';
+import { triggerKindOf } from '@/core/foundry-config/utils/trigger-kind.util';
+import type { IIssueState, IRequestLimits } from '@/core/issue-source/types/issue-source.types';
+import { StepList } from '@/core/task/types/task.types';
+import { taskKindOf } from '@/core/task/utils/task-kind.util';
 
 const KIND_NAMES: Record<TriggerKind, string> = {
   issue: 'issue labels',

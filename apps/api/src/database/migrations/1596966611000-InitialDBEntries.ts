@@ -2,7 +2,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 
 import { BatchJobId, UserRoleId } from '@libs/dto';
 
-import { SysConfigId } from '@/core/sys-config/entities/sys-config.entity';
+/** The registration flag's id in sys_config, a table a later migration drops. */
+const REGISTRATION_ENABLED_ID = 100;
 
 const USER_ROLES = [
   {
@@ -25,7 +26,7 @@ const INITIAL_ADMIN = {
 
 const SYS_CONFIG_ENTRIES = [
   {
-    id: SysConfigId.REGISTRATION_ENABLED,
+    id: REGISTRATION_ENABLED_ID,
     value: 'false',
   },
 ];

@@ -222,7 +222,7 @@ describe('useApiService', () => {
       respondWith(400, { statusCode: 400, message: 'Email or password is incorrect' });
 
       await expect(useApiService().makeRequest('user/login', RequestType.POST)).rejects.toMatchObject({
-        type: ApiErrorType.UNKNOWN,
+        type: ApiErrorType.BAD_REQUEST,
         message: 'Email or password is incorrect',
       });
     });
@@ -232,7 +232,7 @@ describe('useApiService', () => {
 
       await expect(useApiService().makeRequest('user/profile', RequestType.GET)).rejects.toMatchObject({
         type: ApiErrorType.UNKNOWN,
-        message: "We couldn't finish that. Try again in a moment.",
+        message: 'The request failed. Please try again.',
       });
     });
 
@@ -241,7 +241,7 @@ describe('useApiService', () => {
 
       await expect(useApiService().makeRequest('user/profile', RequestType.GET)).rejects.toMatchObject({
         type: ApiErrorType.FORBIDDEN,
-        message: "You don't have access to that.",
+        message: "You don't have permission to do this.",
       });
     });
 
@@ -250,7 +250,7 @@ describe('useApiService', () => {
 
       await expect(useApiService().makeRequest('user/profile', RequestType.GET)).rejects.toMatchObject({
         type: ApiErrorType.UNKNOWN,
-        message: "We couldn't finish that. Try again in a moment.",
+        message: 'The request failed. Please try again.',
       });
     });
 

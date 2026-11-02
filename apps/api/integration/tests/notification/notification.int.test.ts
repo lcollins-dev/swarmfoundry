@@ -89,7 +89,7 @@ describe('Notifications (integration)', () => {
       id: TEST_NOTIFICATION_TYPE.error,
       name: 'Batch job failed',
       severity: NotificationSeverity.ERROR,
-      pageUrl: '/admin/batch-jobs',
+      pageUrl: '/batch-jobs',
     });
   });
 

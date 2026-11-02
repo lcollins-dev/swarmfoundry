@@ -5,7 +5,7 @@ import { In, Not, Repository } from 'typeorm';
 import { SourceWatermark } from './entities/source-watermark.entity';
 import type { WatermarkKind } from './entities/source-watermark.entity';
 
-import type { ISourceConfig } from '@/core/foundry-config/foundry-config.types';
+import type { ISourceConfig } from '@/core/foundry-config/types/foundry-config.types';
 
 type ISource = Pick<ISourceConfig, 'name' | 'url'>;
 

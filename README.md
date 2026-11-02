@@ -22,10 +22,16 @@ implementation and review, triage or scheduled jobs.
 - Run each agent step in a fresh container with CPU and memory limits, configured mounts and sidecar services on a
   private network.
 - Check the labels left by a run, retry infrastructure failures and report failed runs on the issue.
+- Stop an agent command, and every process it started, a minute past its timeout, so a hung command cannot hold a run
+  open.
 - Start one task per matching change. Clear a blocking flag to re-run it.
 - Relabel, comment or assign with static steps that need no agent.
 - Load config from a local directory or track a repository branch. Each task uses the revision it started with.
+- Follow tasks, runs and transcripts live in a web console, and browse the triggers, queue and config.
 - Store tasks, runs and transcripts in Postgres, with configured secrets redacted from stored output and comments.
+- Read tasks, runs, transcripts, triggers and config from a script or agent with a personal API key.
+- Let your own agent sessions read and search tasks, runs and transcripts through a read-only MCP server at `/mcp`.
+  The API keys page shows its URL and how to connect an agent to it.
 
 ## How it works
 
@@ -57,10 +63,9 @@ request to a separate review agent, and leaves merging to a person.
 
 ## Planned features
 
-- A web interface to follow tasks, runs and transcripts live, pause triggers, cancel runs and re-run failed tasks.
+- Pausing triggers, cancelling runs and re-running failed tasks from the console.
 - Triggers on comments that mention the bot, more merge request events and pipeline results.
 - Limits on who can fire a trigger and how many times it runs on one issue.
-- An MCP server and API tokens, so agents and scripts can read tasks, runs and transcripts.
 - Better permissions and sandboxing for agents.
 
 ## Limitations

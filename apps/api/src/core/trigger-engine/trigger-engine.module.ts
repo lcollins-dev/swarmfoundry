@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 
 import { FailureReportService } from './failure-report.service';
+import { QueueSlotsService } from './queue-slots.service';
+import { QueueStatusService } from './queue-status.service';
 import { RunJudgeService } from './run-judge.service';
 import { TaskCheckService } from './task-check.service';
 import { TaskQueueService } from './task-queue.service';
@@ -23,9 +25,11 @@ import { TaskModule } from '@/core/task/task.module';
     RunJudgeService,
     FailureReportService,
     TaskQueueService,
+    QueueSlotsService,
+    QueueStatusService,
     TaskRecoveryService,
     TriggerScheduleService,
   ],
-  exports: [TaskQueueService],
+  exports: [TaskQueueService, QueueStatusService],
 })
 export class TriggerEngineModule {}

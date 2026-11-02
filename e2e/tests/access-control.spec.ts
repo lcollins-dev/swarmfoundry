@@ -3,7 +3,7 @@ import { expect, test } from '../fixtures/test';
 import { LOGGED_OUT_STORAGE_STATE } from '../utils/paths';
 import { webRoute } from '../utils/urls';
 
-const ADMIN_ROUTES = ['/admin/dashboard', '/admin/users', '/admin/batch-jobs', '/admin/sys-config'];
+const ADMIN_ROUTES = ['/triggers', '/queue', '/tasks', '/api-keys', '/users', '/config', '/batch-jobs'];
 
 test.use({ storageState: LOGGED_OUT_STORAGE_STATE });
 
@@ -21,19 +21,39 @@ test.describe('access control', () => {
     }
   });
 
+  test('sends a user without roles from home to their profile, as the overview needs a role', async ({
+    signInPage,
+    page,
+    request,
+  }) => {
+    const user = await createTestUser(request);
+
+    await signInPage.signIn(user);
+
+    for (const route of ['/', '/overview']) {
+      await page.goto(webRoute(route));
+
+      await expect(page).toHaveURL(/\/edit-profile$/);
+    }
+  });
+
   test('sends a signed-out visitor to sign-in from an admin route', async ({ page }) => {
-    await page.goto(webRoute('/admin/users'));
+    await page.goto(webRoute('/users'));
 
     await expect(page).toHaveURL(/\/sign-in/);
   });
 
-  test('keeps a signed-in user off the sign-in page', async ({ signInPage, page, request }) => {
+  test('keeps a signed-in user without roles off the sign-in page, sending them to their profile', async ({
+    signInPage,
+    page,
+    request,
+  }) => {
     const user = await createTestUser(request);
 
     await signInPage.signIn(user);
 
     await page.goto(webRoute('/sign-in'));
 
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page).toHaveURL(/\/edit-profile$/);
   });
 });

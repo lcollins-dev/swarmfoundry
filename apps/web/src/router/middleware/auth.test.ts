@@ -41,6 +41,12 @@ const signInRoute = (redirect?: string): RouteLocationNormalized =>
     meta: { requiresAuthState: 'loggedout' },
   }) as never;
 
+const signInAs = (userRoleIds: UserRoleId[]) => {
+  const userStore = useUserStore();
+  userStore.setToken('token');
+  userStore.setProfile({ name: 'Ann Lee', email: 'ann@example.com', userRoleIds, mustChangePassword: false });
+};
+
 const runAuthMiddleware = (to: RouteLocationNormalized) => authMiddleware.call(undefined, to, to, () => undefined);
 
 describe('authMiddleware', () => {
@@ -51,14 +57,14 @@ describe('authMiddleware', () => {
   });
 
   it('sends a signed-out visitor to sign in, carrying the page they asked for', async () => {
-    expect(await runAuthMiddleware(signedInRoute('/admin/users?page=2'))).toEqual({
+    expect(await runAuthMiddleware(signedInRoute('/users?page=2'))).toEqual({
       path: '/sign-in',
-      query: { redirect: '/admin/users?page=2' },
+      query: { redirect: '/users?page=2' },
     });
   });
 
-  it('sends a signed-out visitor to a plain sign in from the dashboard', async () => {
-    expect(await runAuthMiddleware(signedInRoute('/dashboard'))).toEqual({ path: '/sign-in', query: {} });
+  it('sends a signed-out visitor to a plain sign in from the overview', async () => {
+    expect(await runAuthMiddleware(signedInRoute('/overview'))).toEqual({ path: '/sign-in', query: {} });
   });
 
   it('sends a signed-in visitor on sign in to the page it carries', async () => {
@@ -67,31 +73,63 @@ describe('authMiddleware', () => {
     expect(await runAuthMiddleware(signInRoute('/edit-profile'))).toBe('/edit-profile');
   });
 
-  it('sends a signed-in visitor on sign in to the dashboard when the page it carries leaves this origin', async () => {
-    useUserStore().setToken('token');
+  it('sends a signed-in visitor on sign in home when the page it carries leaves this origin', async () => {
+    signInAs([UserRoleId.SYSTEM_ADMIN]);
 
-    expect(await runAuthMiddleware(signInRoute('//evil.example/admin'))).toBe('/dashboard');
+    expect(await runAuthMiddleware(signInRoute('//evil.example/admin'))).toBe('/overview');
   });
 
-  it('sends a signed-in visitor on sign in to the dashboard when it carries no page', async () => {
-    useUserStore().setToken('token');
+  it('sends a signed-in visitor on sign in home when it carries no page', async () => {
+    signInAs([UserRoleId.SYSTEM_ADMIN]);
 
-    expect(await runAuthMiddleware(signInRoute())).toBe('/dashboard');
+    expect(await runAuthMiddleware(signInRoute())).toBe('/overview');
+  });
+
+  it('sends a user admin home to the users page, since the overview needs the system admin role', async () => {
+    signInAs([UserRoleId.USER_ADMIN]);
+
+    expect(await runAuthMiddleware(signInRoute())).toBe('/users');
+  });
+
+  it('sends a user without a role home to their profile', async () => {
+    signInAs([]);
+
+    expect(await runAuthMiddleware(signInRoute())).toBe('/edit-profile');
   });
 
   it('sends the user to the page sign in carries once they sign in there', async () => {
-    expect(await runAuthMiddleware(signInRoute('/admin/users'))).toBeUndefined();
+    expect(await runAuthMiddleware(signInRoute('/users'))).toBeUndefined();
 
     useUserStore().setToken('token');
     await nextTick();
 
-    expect(routerMock.replace).toHaveBeenCalledWith('/admin/users');
+    expect(routerMock.replace).toHaveBeenCalledWith('/users');
+  });
+
+  it('waits for the profile after sign in before sending the user home, as home depends on the roles', async () => {
+    expect(await runAuthMiddleware(signInRoute())).toBeUndefined();
+
+    const userStore = useUserStore();
+    userStore.setToken('token');
+    await nextTick();
+
+    expect(routerMock.replace).not.toHaveBeenCalled();
+
+    userStore.setProfile({
+      name: 'Ann Lee',
+      email: 'ann@example.com',
+      userRoleIds: [UserRoleId.SYSTEM_ADMIN],
+      mustChangePassword: false,
+    });
+    await nextTick();
+
+    expect(routerMock.replace).toHaveBeenCalledWith('/overview');
   });
 
   it('sends a user who signs out on a page to a plain sign in', async () => {
     useUserStore().setToken('token');
 
-    expect(await runAuthMiddleware(signedInRoute('/admin/users'))).toBeUndefined();
+    expect(await runAuthMiddleware(signedInRoute('/users'))).toBeUndefined();
 
     useUserStore().clearAuth();
     await nextTick();
@@ -104,29 +142,27 @@ describe('authMiddleware', () => {
     userStore.setToken('token');
     userStore.setProfile({ name: 'Admin', email: 'admin@example.com', userRoleIds: [], mustChangePassword: true });
 
-    expect(await runAuthMiddleware(signedInRoute('/admin/users'))).toBe('/setup');
+    expect(await runAuthMiddleware(signedInRoute('/users'))).toBe('/setup');
     expect(await runAuthMiddleware(signedInRoute('/setup'))).toBeUndefined();
   });
 
-  it('sends a user who has finished setup from the setup page to the dashboard', async () => {
-    const userStore = useUserStore();
-    userStore.setToken('token');
-    userStore.setProfile({ name: 'Admin', email: 'me@example.com', userRoleIds: [], mustChangePassword: false });
+  it('sends a user who has finished setup from the setup page home', async () => {
+    signInAs([UserRoleId.SYSTEM_ADMIN]);
 
-    expect(await runAuthMiddleware(signedInRoute('/setup'))).toBe('/dashboard');
+    expect(await runAuthMiddleware(signedInRoute('/setup'))).toBe('/overview');
   });
 
   it('sends a user whose session ends on a page to sign in, carrying that page', async () => {
     useUserStore().setToken('token');
 
-    expect(await runAuthMiddleware(signedInRoute('/admin/users?page=2'))).toBeUndefined();
+    expect(await runAuthMiddleware(signedInRoute('/users?page=2'))).toBeUndefined();
 
     useUserStore().endSession();
     await nextTick();
 
     expect(routerMock.replace).toHaveBeenCalledWith({
       path: '/sign-in',
-      query: { redirect: '/admin/users?page=2' },
+      query: { redirect: '/users?page=2' },
     });
   });
 
@@ -135,12 +171,20 @@ describe('authMiddleware', () => {
     userStore.setToken('token');
     userStore.setProfile({ name: 'User', email: 'user@example.com', userRoleIds: [], mustChangePassword: false });
 
-    expect(await runAuthMiddleware(adminRoute('/admin/batch-jobs'))).toEqual({
+    expect(await runAuthMiddleware(adminRoute('/batch-jobs'))).toEqual({
       name: 'not-found',
-      params: { pathMatch: ['admin', 'batch-jobs'] },
+      params: { pathMatch: ['batch-jobs'] },
       query: { page: '2' },
       hash: '#top',
     });
+  });
+
+  it('sends a user without the role for the overview home to the first page their roles open', async () => {
+    signInAs([UserRoleId.USER_ADMIN]);
+
+    const home = { ...adminRoute('/overview'), path: '/overview' } as RouteLocationNormalized;
+
+    expect(await runAuthMiddleware(home)).toBe('/users');
   });
 
   it('lets a signed-in user with the role through', async () => {
@@ -153,6 +197,6 @@ describe('authMiddleware', () => {
       mustChangePassword: false,
     });
 
-    expect(await runAuthMiddleware(adminRoute('/admin/batch-jobs'))).toBeUndefined();
+    expect(await runAuthMiddleware(adminRoute('/batch-jobs'))).toBeUndefined();
   });
 });

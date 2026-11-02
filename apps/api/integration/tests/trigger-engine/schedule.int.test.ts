@@ -15,8 +15,8 @@ import {
 } from '../../factories/trigger-engine.factory';
 import { bootstrapApp } from '../../setup';
 import { dbQuery } from '../../utils/db';
-import { fireTimeAtOrBefore } from '@/core/foundry-config/cron-schedule';
-import type { ITriggerConfig } from '@/core/foundry-config/foundry-config.types';
+import type { ITriggerConfig } from '@/core/foundry-config/types/foundry-config.types';
+import { fireTimeAtOrBefore } from '@/core/foundry-config/utils/cron-schedule.util';
 
 interface ITaskRow {
   id: number;

@@ -12,7 +12,7 @@ import {
 } from '../../factories/trigger-engine.factory';
 import { bootstrapApp } from '../../setup';
 import { dbQuery } from '../../utils/db';
-import type { IAgentStepConfig, ITriggerConfig } from '@/core/foundry-config/foundry-config.types';
+import type { IAgentStepConfig, ITriggerConfig } from '@/core/foundry-config/types/foundry-config.types';
 
 interface ITaskRow {
   issueIid: number;

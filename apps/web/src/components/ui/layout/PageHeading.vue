@@ -6,7 +6,11 @@
       <slot name="leading" />
 
       <div class="min-w-0 flex-1">
-        <h1 class="m-0 text-2xl font-semibold tracking-tight text-header">{{ props.title }}</h1>
+        <div v-if="$slots.tags" class="flex flex-wrap items-center gap-2.5">
+          <h1 class="m-0 text-2xl font-semibold tracking-tight text-header">{{ props.title }}</h1>
+          <slot name="tags" />
+        </div>
+        <h1 v-else class="m-0 text-2xl font-semibold tracking-tight text-header">{{ props.title }}</h1>
         <p v-if="props.subtitle || $slots.subtitle" class="mb-0 mt-1 text-muted">
           <slot name="subtitle">{{ props.subtitle }}</slot>
         </p>

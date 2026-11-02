@@ -23,8 +23,11 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const mountModal = (show: boolean) =>
-  mount(Modal, { props: { show, title: 'Delete Ann?' }, slots: { default: '<p>This cannot be undone.</p>' } });
+const mountModal = (show: boolean, dismissible = true) =>
+  mount(Modal, {
+    props: { show, title: 'Delete Ann?', dismissible },
+    slots: { default: '<p>This cannot be undone.</p>' },
+  });
 
 describe('Modal', () => {
   it('opens as a modal dialog titled by its heading', () => {
@@ -69,6 +72,17 @@ describe('Modal', () => {
     await wrapper.get('dialog').trigger('click');
 
     expect(wrapper.emitted('update:show')).toEqual([[false]]);
+  });
+
+  it('stays open on Escape and a backdrop click, with no close button, when not dismissible', async () => {
+    const wrapper = mountModal(true, false);
+
+    await wrapper.get('dialog').trigger('cancel');
+    await wrapper.get('dialog').trigger('mousedown');
+    await wrapper.get('dialog').trigger('click');
+
+    expect(wrapper.emitted('update:show')).toBeUndefined();
+    expect(wrapper.find('button[aria-label="Close"]').exists()).toBe(false);
   });
 
   it('stays open when a selection dragged out of its card ends on the backdrop', async () => {

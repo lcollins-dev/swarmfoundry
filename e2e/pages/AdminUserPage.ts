@@ -25,11 +25,23 @@ export class AdminUserPage {
     return this.page.getByRole('button', { name: label, exact: true });
   }
 
+  passwordLinkButton(label: 'Reset password' | 'Resend invite'): Locator {
+    return this.page.getByRole('button', { name: label, exact: true });
+  }
+
+  get passwordLinkValue(): Locator {
+    return this.page.getByTestId('password-link-value');
+  }
+
+  get invitedTag(): Locator {
+    return this.page.getByTestId('user-invited');
+  }
+
   get signOutButton(): Locator {
     return this.page.getByRole('button', { name: 'Sign out everywhere', exact: true });
   }
 
   async goto(userId: number): Promise<void> {
-    await this.page.goto(webRoute(`/admin/users/${userId}`));
+    await this.page.goto(webRoute(`/users/${userId}`));
   }
 }

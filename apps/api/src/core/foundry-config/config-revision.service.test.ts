@@ -5,7 +5,7 @@ import type { ConfigRevision } from './entities/config-revision.entity';
 
 import { ConfigRevisionService } from './config-revision.service';
 
-import { ConfigRevisionStatus } from './foundry-config.types';
+import { ConfigRevisionStatus } from './types/foundry-config.types';
 
 const SHA = 'a'.repeat(40);
 

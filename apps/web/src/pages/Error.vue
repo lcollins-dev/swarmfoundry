@@ -1,7 +1,7 @@
 <template>
   <div class="flex flex-col gap-6">
     <ui-result :icon="IconError" type="error" title="Something went wrong">
-      We couldn't finish that. Try again in a moment.
+      Something went wrong while loading this page. Please try again.
 
       <template #actions>
         <ui-link to="/" unstyled>

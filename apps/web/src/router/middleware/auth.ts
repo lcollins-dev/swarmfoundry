@@ -1,6 +1,8 @@
 import { WatchHandle, watch } from 'vue';
 import { NavigationGuardWithThis, RouteLocationRaw, useRouter } from 'vue-router';
 
+import { UserRoleId } from '@libs/dto';
+
 import { RETURN_PATH_PARAM, SIGN_IN_PATH, signInReturnPath } from '@/utils/signInReturnPath';
 
 import { useLogService } from '@/services/LogService';
@@ -10,7 +12,22 @@ import { useUserStore } from '@/stores/user';
 const logService = useLogService();
 const logger = logService.createLogger('router/middleware/auth');
 
-export const HOME_PATH = '/dashboard';
+export const HOME_PATH = '/overview';
+
+/** Falls back to the first page the user's roles open, since the overview needs the system admin role. */
+export const homePath = (): string => {
+  const userStore = useUserStore();
+
+  if (userStore.hasRole(UserRoleId.SYSTEM_ADMIN)) {
+    return HOME_PATH;
+  }
+
+  if (userStore.hasRole(UserRoleId.USER_ADMIN)) {
+    return '/users';
+  }
+
+  return '/edit-profile';
+};
 
 export const NOT_FOUND_ROUTE = 'not-found';
 
@@ -51,7 +68,7 @@ export const authMiddleware: NavigationGuardWithThis<undefined> = async to => {
       }
 
       if (!mustChangePassword && to.path === SETUP_PATH) {
-        return HOME_PATH;
+        return homePath();
       }
 
       if (to.meta.requiresRoleId !== undefined) {
@@ -60,13 +77,25 @@ export const authMiddleware: NavigationGuardWithThis<undefined> = async to => {
           : [to.meta.requiresRoleId];
 
         if (!userStore.hasRole(...requiresRoleIds)) {
+          // Home is the overview, which needs a role, so anyone without it goes to the first page theirs open.
+          if (to.path === HOME_PATH) {
+            return homePath();
+          }
+
           logger.info("doRedirect(): User doesn't have required role");
           return notFound;
         }
       }
     } else if (to.meta.requiresAuthState === 'loggedout' && userStore.loggedIn) {
+      const returnPath = signInReturnPath(to.query);
+
+      // Home depends on the roles, which sign in loads only after it sets the token.
+      if (returnPath === undefined && userStore.profile === null) {
+        return undefined;
+      }
+
       logger.info("doRedirect(): User isn't logged out, redirecting home");
-      return signInReturnPath(to.query) ?? HOME_PATH;
+      return returnPath ?? homePath();
     }
   };
 
@@ -85,7 +114,7 @@ export const authMiddleware: NavigationGuardWithThis<undefined> = async to => {
 
   if (newRoute === undefined) {
     userWatcher = watch(
-      () => userStore.token,
+      () => [userStore.token, userStore.profile],
       () => {
         const newRoute = doRedirect(userStore.sessionEnded);
 

@@ -3,8 +3,8 @@
     <ui-page-heading title="Profile &amp; security" subtitle="Your name, email and password." />
 
     <ui-form :name="PROFILE_FORM" layout="row" @submit="doSaveProfile">
-      <ui-card title="Profile" subtitle="How you appear and the email you sign in with.">
-        <ui-form-field v-slot="{ input }" label="Display name" help="Shown in the header." path="name">
+      <ui-card title="Profile" subtitle="Update your name and sign-in email.">
+        <ui-form-field v-slot="{ input }" label="Display name" help="The name shown in the app." path="name">
           <ui-input
             v-model:value="name"
             v-bind="input"
@@ -35,10 +35,7 @@
     </ui-form>
 
     <ui-form :name="PASSWORD_FORM" layout="row" @submit="doChangePassword">
-      <ui-card
-        title="Password"
-        subtitle="Changing it signs you out everywhere else. You'll need to sign in again on each one."
-      >
+      <ui-card title="Password" subtitle="Update the password you use to sign in.">
         <ui-form-field v-slot="{ input }" label="New password" path="password">
           <ui-input
             v-model:value="newPassword"
@@ -131,7 +128,7 @@ const doSaveProfile = () => {
   userService
     .updateProfile({ name: name.value.trim(), email: email.value.trim() }, PROFILE_FORM)
     .then(() => {
-      notificationStore.addToast('Profile updated', 'Your changes have been saved.');
+      notificationStore.addToast('Profile updated');
     })
     .finally(() => {
       profileLoading.value = false;
@@ -145,7 +142,7 @@ const changePassword = async () => {
   const confirmed = await dialogStore.confirm({
     type: DialogType.WARNING,
     title: 'Change your password?',
-    message: 'Anywhere else you are signed in is signed out and has to sign in again.',
+    message: 'You will be signed out on other devices.',
     confirmLabel: 'Change Password',
   });
 

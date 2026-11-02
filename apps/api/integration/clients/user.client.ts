@@ -36,8 +36,19 @@ export const getUserList = (
 export const getUserStats = (app: NestExpressApplication, token: string) =>
   request(app.getHttpServer()).get('/api/v1/admin/user/stats').set(authHeaders(token));
 
-export const createUser = (app: NestExpressApplication, token: string, body: Record<string, unknown>) =>
-  request(app.getHttpServer()).post('/api/v1/admin/user').set(authHeaders(token)).send(body);
+export const inviteUser = (app: NestExpressApplication, token: string, body: Record<string, unknown>) =>
+  request(app.getHttpServer()).post('/api/v1/admin/user/invite').set(authHeaders(token)).send(body);
+
+export const createPasswordLink = (app: NestExpressApplication, token: string, userId: number) =>
+  request(app.getHttpServer()).post(`/api/v1/admin/user/${userId}/password-link`).set(authHeaders(token));
+
+export const checkPasswordLink = (app: NestExpressApplication, body: Record<string, unknown>) =>
+  request(app.getHttpServer()).post('/api/v1/password-link/check').send(body);
+
+export const setPassword = (app: NestExpressApplication, body: Record<string, unknown>) =>
+  request(app.getHttpServer()).post('/api/v1/password-link').send(body);
+
+export const linkToken = (link: string): string => link.split('#')[1];
 
 export const getUser = (app: NestExpressApplication, token: string, userId: number | string) =>
   request(app.getHttpServer()).get(`/api/v1/admin/user/${userId}`).set(authHeaders(token));

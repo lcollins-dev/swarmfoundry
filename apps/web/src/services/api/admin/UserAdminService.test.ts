@@ -2,7 +2,8 @@ import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  CreateUserResponseDto,
+  InviteUserResponseDto,
+  PasswordLinkDto,
   UserListStatus,
   UserListResponseDto,
   UserRoleId,
@@ -89,17 +90,35 @@ describe('useUserAdminService', () => {
     await expect(useUserAdminService().getUserStats()).resolves.toEqual({ total: 3, enabled: 2, disabled: 1 });
   });
 
-  it('posts a new user and returns the id the api hands back', async () => {
-    makeRequestMock.mockResolvedValue(42);
+  it('posts an invite and returns the new user with their link', async () => {
+    const invited = { userId: 42, passwordLink: { link: 'https://example.com/set-password#abc', emailed: true } };
+    makeRequestMock.mockResolvedValue(invited);
 
-    const userId = await useUserAdminService().createUser(
-      { name: 'Tester', email: 'tester@example.com', password: 'pw', userRoleIds: [] },
-      'create-user'
+    const response = await useUserAdminService().inviteUser(
+      { name: 'Tester', email: 'tester@example.com', userRoleIds: [] },
+      'invite-user'
     );
 
-    expect(makeRequestMock.mock.calls[0][2]).toMatchObject({ response: CreateUserResponseDto });
-    expect(userId).toBe(42);
+    expect(makeRequestMock).toHaveBeenCalledWith('admin/user/invite', RequestType.POST, {
+      ...TOKEN_OPTIONS,
+      response: InviteUserResponseDto,
+      body: { name: 'Tester', email: 'tester@example.com', userRoleIds: [] },
+      form: 'invite-user',
+    });
+    expect(response).toBe(invited);
     expect(clearAllNotificationsMock).toHaveBeenCalled();
+  });
+
+  it('posts for a new password link for a user', async () => {
+    const passwordLink = { link: 'https://example.com/set-password#abc', emailed: false };
+    makeRequestMock.mockResolvedValue(passwordLink);
+
+    await expect(useUserAdminService().createPasswordLink(42)).resolves.toBe(passwordLink);
+
+    expect(makeRequestMock).toHaveBeenCalledWith('admin/user/42/password-link', RequestType.POST, {
+      ...TOKEN_OPTIONS,
+      response: PasswordLinkDto,
+    });
   });
 
   it('reads a single user by id', async () => {

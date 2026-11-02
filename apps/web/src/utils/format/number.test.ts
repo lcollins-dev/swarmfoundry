@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatNumber, formatNumberAbbreviated } from './number';
+import { formatNumber, formatNumberAbbreviated, formatUsd } from './number';
 
 describe('formatNumber', () => {
   it('renders an integer with locale grouping', () => {
@@ -27,5 +27,12 @@ describe('formatNumberAbbreviated', () => {
   it('renders millions with an M suffix', () => {
     expect(formatNumberAbbreviated(1_500_000)).toBe('1.5M');
     expect(formatNumberAbbreviated(2_000_000)).toBe('2M');
+  });
+});
+
+describe('formatUsd', () => {
+  it('renders dollars to the cent', () => {
+    expect(formatUsd(13.042)).toBe('$13.04');
+    expect(formatUsd(0)).toBe('$0.00');
   });
 });

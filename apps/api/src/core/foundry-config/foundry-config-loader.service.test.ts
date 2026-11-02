@@ -12,7 +12,7 @@ import { SecretRedactionService } from '@/core/foundry-config/secret-redaction.s
 import { VariableSubstitutionService } from '@/core/foundry-config/variable-substitution.service';
 
 import { FoundryConfigError } from '@/core/foundry-config/foundry-config.error';
-import type { IAgentStepConfig, IStepConfig } from '@/core/foundry-config/foundry-config.types';
+import type { IAgentStepConfig, IStepConfig } from '@/core/foundry-config/types/foundry-config.types';
 
 const isAgentStep = (step: IStepConfig): step is IAgentStepConfig => step.kind === 'agent';
 
@@ -138,12 +138,12 @@ describe('FoundryConfigLoaderService', () => {
       const { config } = foundryConfigLoaderService.load(EXAMPLE_CONFIG, EXAMPLE_ENV);
       const [implement, review, merged] = config.triggers;
 
-      expect(implement.failureSteps).toEqual([
+      expect(implement.failureSteps).toMatchObject([
         { kind: 'comment', body: '{{failure.report}}' },
         { kind: 'relabel', add: ['foundry::failed'], remove: ['foundry::running'] },
       ]);
       expect(review.failureSteps).toEqual(implement.failureSteps);
-      expect(merged.steps).toEqual([
+      expect(merged.steps).toMatchObject([
         {
           kind: 'relabel',
           add: ['workflow::merged'],
@@ -204,9 +204,9 @@ describe('FoundryConfigLoaderService', () => {
         .load(EXAMPLE_CONFIG, EXAMPLE_ENV)
         .config.triggers[0].steps.filter(isAgentStep);
 
-      expect(step.prompt.path).toBe(join(EXAMPLE_DIR, 'prompts/implement.md'));
+      expect(step.prompt.path).toBe(join(EXAMPLE_DIR, 'prompts/implement/prompt.md'));
       expect(step.prompt.content).toContain('{{issue.iid}}');
-      expect(step.systemPrompt?.path).toBe(join(EXAMPLE_DIR, 'prompts/implement.system.md'));
+      expect(step.systemPrompt?.path).toBe(join(EXAMPLE_DIR, 'prompts/implement/system-prompt.md'));
     });
 
     it('substitutes the variables and collects their values as secrets', () => {
@@ -254,6 +254,18 @@ describe('FoundryConfigLoaderService', () => {
     });
   });
 
+  describe('files', () => {
+    it('records each file it read as written, the config file first, and no .env', () => {
+      const configPath = writeConfig(baseConfig(), { '.env': 'UNUSED=value' });
+      const dir = dirname(configPath);
+
+      const { files } = foundryConfigLoaderService.load(configPath, EXAMPLE_ENV);
+
+      expect([...files.keys()]).toEqual([configPath, join(dir, 'settings.json'), join(dir, 'prompts/implement.md')]);
+      expect(files.get(configPath)).toBe(readFileSync(configPath, 'utf8'));
+    });
+  });
+
   describe('variables', () => {
     it('reads a .env beside the config file', () => {
       const configPath = writeConfig(baseConfig(), {
@@ -279,6 +291,81 @@ describe('FoundryConfigLoaderService', () => {
       });
 
       expect(() => foundryConfigLoaderService.load(configPath, {}, { readDotEnv: false })).toThrow(/GITLAB_TOKEN/);
+    });
+    it('keeps the served text of sources, trigger rules and agent steps as written, from any layer', () => {
+      const base = baseConfig();
+      base.sources.gitlab = { ...base.sources.gitlab, url: '${GITLAB_URL}', projects: ['${PROJECT}'] };
+      base.agents.subscription.model = '${MODEL}';
+      const triggers = {
+        implement: {
+          source: 'gitlab',
+          steps: [{ agent: { ...IMPLEMENT_STEP, prompt: '${PROMPTS}/implement.md', systemPrompt: '${PROMPTS}/s.md' } }],
+          issue: {
+            labels: ['${LABEL}'],
+            notLabels: ['${LABEL}'],
+            anyAssignee: ['${REVIEWER}'],
+            projects: ['${PROJECT}'],
+            expect: { anyLabel: ['${LABEL}'] },
+          },
+        },
+        merged: {
+          source: 'gitlab',
+          steps: [{ comment: 'Merged' }],
+          mergeRequest: { event: 'merged', targetBranch: '${BRANCH}', labels: ['${LABEL}'], projects: ['${PROJECT}'] },
+        },
+        friction: {
+          source: 'gitlab',
+          steps: [{ agent: { ...IMPLEMENT_STEP, prompt: './prompts/s.md', agent: { model: '${STEP_MODEL}' } } }],
+          schedule: { cron: '${CRON}', project: '${PROJECT}' },
+        },
+      };
+      const environment = {
+        ...EXAMPLE_ENV,
+        GITLAB_URL: 'https://gitlab.example.com',
+        PROJECT: 'acme/app',
+        MODEL: 'claude-opus-5-5',
+        STEP_MODEL: 'claude-sonnet-5',
+        PROMPTS: './prompts',
+        LABEL: 'workflow::ready',
+        REVIEWER: 'ada',
+        BRANCH: 'main',
+        CRON: '0 9 * * 1',
+      };
+
+      const configPath = writeConfig({ ...base, triggers }, { 'prompts/s.md': 'Be brief' });
+      const { config } = foundryConfigLoaderService.load(configPath, environment);
+      const [implement, merged, friction] = config.triggers;
+
+      expect(config.sources[0]).toMatchObject({ url: 'https://gitlab.example.com', projects: ['acme/app'] });
+      expect(config.sources[0].written).toEqual({ url: '${GITLAB_URL}' });
+      expect(implement.issue?.labels).toEqual(['workflow::ready']);
+      expect(implement.written).toEqual({
+        issue: {
+          labels: ['${LABEL}'],
+          notLabels: ['${LABEL}'],
+          anyAssignee: ['${REVIEWER}'],
+          projects: ['${PROJECT}'],
+          expect: { anyLabel: ['${LABEL}'] },
+        },
+        schedule: undefined,
+        mergeRequest: undefined,
+      });
+      expect(implement.steps[0]).toMatchObject({
+        agent: { model: 'claude-opus-5-5' },
+        written: { model: '${MODEL}', prompt: '${PROMPTS}/implement.md', systemPrompt: '${PROMPTS}/s.md' },
+      });
+      expect(merged.written.mergeRequest).toEqual({
+        event: 'merged',
+        targetBranch: '${BRANCH}',
+        labels: ['${LABEL}'],
+        notLabels: [],
+        projects: ['${PROJECT}'],
+      });
+      expect(friction.written.schedule).toEqual({ cron: '${CRON}', project: '${PROJECT}' });
+      expect(friction.steps[0]).toMatchObject({
+        agent: { model: 'claude-sonnet-5' },
+        written: { model: '${STEP_MODEL}', prompt: './prompts/s.md' },
+      });
     });
   });
 
@@ -613,10 +700,38 @@ describe('FoundryConfigLoaderService', () => {
 
       const [trigger] = foundryConfigLoaderService.load(writeConfig(config), EXAMPLE_ENV).config.triggers;
 
-      expect(trigger.steps).toEqual([
+      expect(trigger.steps).toMatchObject([
         { kind: 'relabel', add: ['workflow::test'], remove: ['workflow::review'] },
         { kind: 'comment', body: 'Merged in !{{mergeRequest.iid}} for #{{issue.iid}}.' },
         { kind: 'assign', usernames: ['ada'] },
+      ]);
+    });
+
+    it('keeps each static step as written beside its substituted values', () => {
+      const steps = [
+        { relabel: { add: ['${READY_LABEL}'], remove: ['workflow::review'] } },
+        { comment: 'Deploy with ${DEPLOY_PASSWORD} on #{{issue.iid}}' },
+        { assign: ['${REVIEWER}'] },
+      ];
+      const config = { ...baseConfig(), triggers: { merged: mergeRequestTrigger({ steps }) } };
+      const environment = { ...EXAMPLE_ENV, READY_LABEL: 'workflow::test', REVIEWER: 'ada' };
+
+      const configPath = writeConfig(config, { '.env': 'DEPLOY_PASSWORD=Sup3rDeployPw' });
+      const [trigger] = foundryConfigLoaderService.load(configPath, environment).config.triggers;
+
+      expect(trigger.steps).toEqual([
+        {
+          kind: 'relabel',
+          add: ['workflow::test'],
+          remove: ['workflow::review'],
+          written: { add: ['${READY_LABEL}'], remove: ['workflow::review'] },
+        },
+        {
+          kind: 'comment',
+          body: 'Deploy with Sup3rDeployPw on #{{issue.iid}}',
+          written: { body: 'Deploy with ${DEPLOY_PASSWORD} on #{{issue.iid}}' },
+        },
+        { kind: 'assign', usernames: ['ada'], written: { usernames: ['${REVIEWER}'] } },
       ]);
     });
 
@@ -635,7 +750,7 @@ describe('FoundryConfigLoaderService', () => {
       ).config;
 
       expect(loaded.triggers.map(trigger => [trigger.name, trigger.failureSteps])).toEqual([
-        ['implement', [{ kind: 'comment', body: '{{failure.report}}' }]],
+        ['implement', [{ kind: 'comment', body: '{{failure.report}}', written: { body: '{{failure.report}}' } }]],
         ['quiet', []],
         ['merged', []],
         ['friction', []],

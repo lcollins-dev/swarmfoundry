@@ -1,0 +1,101 @@
+{{#if subject}}
+You're invited to Swarmfoundry
+{{/if}}
+{{#if text}}
+Hi {{name}},
+
+You've been invited to Swarmfoundry. Use the link below to set your password.
+
+{{link}}
+
+This link can be used once and expires in {{lifetime}}. If you weren't expecting this email, you can ignore it.
+
+Swarmfoundry
+{{/if}}
+{{#if html}}
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    
+    <style>
+      .container {
+        width: 100%;
+
+        padding: 20px;
+
+        font-family: 'open sans', 'helvetica neue', sans-serif;
+        font-size: 18px;
+
+        background-color: #f6f6f6;
+      }
+
+      .content {
+        margin: 0 auto;
+        max-width: 500px;
+      }
+
+      .inner-content {
+        padding: 30px;
+
+        background-color: white;
+
+        border: 1px solid #eee;
+        border-radius: 10px;
+      }
+
+      .bold {
+        font-weight: bold;
+      }
+
+      .newline {
+        margin-bottom: 18px !important;
+      }
+
+      .button-container {
+        display: flex;
+      }
+
+      .button-container,
+      * {
+        margin: 0 auto;
+      }
+
+      button {
+        padding: 8px 12px;
+
+        color: white;
+        font-size: 18px;
+        font-weight: bold;
+
+        background-color: #89c8fd;
+
+        border: 1px solid white;
+        border-radius: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="content">
+        <div class="inner-content">
+          <div class="newline bold">Hi {{name}},</div>
+
+          <div class="newline">You've been invited to Swarmfoundry. Set your password to get started.</div>
+
+          <div class="button-container newline">
+            <a href="{{link}}">
+              <button>Choose Password</button>
+            </a>
+          </div>
+
+          <div class="newline">This link can be used once and expires in {{lifetime}}. If you weren't expecting this email, you can ignore it.</div>
+
+          <div class="bold">Swarmfoundry</div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+{{/if}}

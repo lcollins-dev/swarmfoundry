@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
-import type { IPromptContext, IUnknownVariable, TriggerKind } from './foundry-config.types';
-import { triggerKindOf } from './trigger-kind';
+import type { IPromptContext, IUnknownVariable, TriggerKind } from './types/foundry-config.types';
+import { triggerKindOf } from './utils/trigger-kind.util';
 
 type Resolve = (context: IPromptContext) => string | undefined;
 

@@ -10,8 +10,8 @@ import type { SourceWatermarkService } from './source-watermark.service';
 import type { FoundryConfigService } from '@/core/foundry-config/foundry-config.service';
 
 import { SILENT_EDIT_WINDOW_MS, WATERMARK_OVERLAP_MS } from './gitlab-polling.constants';
-import type { IIssueEvent, ISourceEvent } from './issue-source.types';
-import type { ISourceConfig } from '@/core/foundry-config/foundry-config.types';
+import type { IIssueEvent, ISourceEvent } from './types/issue-source.types';
+import type { ISourceConfig } from '@/core/foundry-config/types/foundry-config.types';
 
 const TOKEN = 'glpat-orchestrator-secret';
 
@@ -22,6 +22,7 @@ const config: ISourceConfig = {
   token: TOKEN,
   pollInterval: 60_000,
   projects: ['group/project'],
+  written: { url: 'https://gitlab.test' },
 };
 
 interface IFakeIssue {
@@ -179,6 +180,7 @@ const foundryConfigService = {
     return triggers;
   },
   redact: (value: unknown) => (typeof value === 'string' ? value.replaceAll(TOKEN, '[redacted]') : value),
+  redactText: (text: string) => text.replaceAll(TOKEN, '[redacted]'),
 } as unknown as FoundryConfigService;
 
 describe('GitLabSourceService', () => {
@@ -854,7 +856,7 @@ describe('GitLabSourceService', () => {
     it('logs a failed removal and resolves', async () => {
       vi.spyOn(watermarks, 'retainProjects').mockRejectedValueOnce(new Error('database down'));
 
-      await expect(source.poll(config, emit, signal)).resolves.toBeUndefined();
+      await expect(source.poll(config, emit, signal)).resolves.toEqual([]);
       expect(JSON.stringify(logged)).toContain('Failed to remove the issue watermarks');
     });
   });
@@ -939,7 +941,9 @@ describe('GitLabSourceService', () => {
       const mergeRequests = delegate();
       mergeRequests.poll.mockRejectedValueOnce(new Error(`GitLab said no to ${TOKEN}`));
 
-      await withDelegate(mergeRequests).poll(config, emit, signal);
+      await expect(withDelegate(mergeRequests).poll(config, emit, signal)).resolves.toEqual([
+        { project: 'group/project', error: 'Error: GitLab said no to [redacted]' },
+      ]);
 
       expect(JSON.stringify(logged)).toContain("Failed to poll the project's merge requests");
       expect(JSON.stringify(logged)).not.toContain(TOKEN);
@@ -950,7 +954,7 @@ describe('GitLabSourceService', () => {
       const mergeRequests = delegate();
       mergeRequests.retainProjects.mockRejectedValueOnce(new Error('database down'));
 
-      await expect(withDelegate(mergeRequests).poll(config, emit, signal)).resolves.toBeUndefined();
+      await expect(withDelegate(mergeRequests).poll(config, emit, signal)).resolves.toEqual([]);
       expect(JSON.stringify(logged)).toContain('Failed to remove the watermarks of unwatched projects');
     });
 

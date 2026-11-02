@@ -23,8 +23,8 @@ import {
 import type { ConfigService } from '@/config/config.service';
 
 import { RunConfigError } from './run-config.error';
-import { SandboxLabel, SandboxRole } from './runner.types';
-import { StepList } from '@/core/task/task.types';
+import { SandboxLabel, SandboxRole } from './types/runner.types';
+import { StepList } from '@/core/task/types/task.types';
 
 const IDS = { taskId: 12, runId: 34, runNumber: 2, list: StepList.STEPS, step: 1 };
 

@@ -1,6 +1,6 @@
 import { Column, Entity, PrimaryGeneratedColumn, Unique } from 'typeorm';
 
-import { ConfigRevisionStatus, type IConfigIssue } from '../foundry-config.types';
+import { ConfigRevisionStatus, type IConfigIssue } from '../types/foundry-config.types';
 
 @Entity()
 @Unique('UQ_config_revision_sha', ['sha'])

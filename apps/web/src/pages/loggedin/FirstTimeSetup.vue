@@ -4,7 +4,7 @@
       <ui-form-heading title="Set up your account" subtitle="Choose the email and password you'll sign in with." />
 
       <ui-notice class="mb-6" type="warning" title="You're using the default admin account">
-        Its password is in the docs, so anyone could use it. Set your own to continue.
+        The default password is public. Set your own password to secure this account.
       </ui-notice>
 
       <ui-form-field v-slot="{ input }" label="Name" path="name">
@@ -18,12 +18,7 @@
         />
       </ui-form-field>
 
-      <ui-form-field
-        v-slot="{ input }"
-        label="Email"
-        help="You'll sign in with this. Change it to your own address."
-        path="email"
-      >
+      <ui-form-field v-slot="{ input }" label="Email" help="Use your own email address to sign in." path="email">
         <ui-input
           v-model:value="setupForm.email"
           v-bind="input"
@@ -82,7 +77,7 @@ import { useUserStore } from '@/stores/user';
 
 import { UiButton, UiCard, UiForm, UiFormField, UiFormHeading, UiInput, UiNotice } from '@/components/ui';
 
-import { HOME_PATH } from '@/router/middleware/auth';
+import { homePath } from '@/router/middleware/auth';
 
 const FORM_NAME = 'setup';
 
@@ -127,8 +122,8 @@ const finishSetup = async () => {
   setupForm.password = '';
   setupForm.confirmPassword = '';
 
-  await router.push(HOME_PATH);
-  notificationStore.addToast('Account set up', 'Sign in with your new email and password from now on.');
+  await router.push(homePath());
+  notificationStore.addToast('Account set up', 'Use your new email and password the next time you sign in.');
 };
 
 const doFinishSetup = () => {

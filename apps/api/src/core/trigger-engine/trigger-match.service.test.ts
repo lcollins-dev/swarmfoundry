@@ -8,14 +8,14 @@ import type {
   IMergeRequestBlock,
   IMergeRequestTriggerConfig,
   IScheduleTriggerConfig,
-} from '@/core/foundry-config/foundry-config.types';
+} from '@/core/foundry-config/types/foundry-config.types';
 import type {
   IIssueAssignment,
   IIssueChange,
   IIssueEvent,
   IIssueLabelEvent,
   IMergeRequestEvent,
-} from '@/core/issue-source/issue-source.types';
+} from '@/core/issue-source/types/issue-source.types';
 
 const SOURCE = 'gitlab-local';
 

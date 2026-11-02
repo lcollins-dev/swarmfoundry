@@ -8,7 +8,7 @@ import { FoundryConfigLoaderService } from './foundry-config-loader.service';
 import { ConfigService } from '@/config/config.service';
 
 import { FoundryConfigError } from './foundry-config.error';
-import type { IConfigIssue, IConfigRepo, IConfigRevision, ILoadedFoundryConfig } from './foundry-config.types';
+import type { IConfigIssue, IConfigRepo, IConfigRevision, ILoadedFoundryConfig } from './types/foundry-config.types';
 import { ConfigError, SECRETS } from '@/config/config.schema';
 
 export const CONFIG_FILE = 'swarmfoundry.yaml';

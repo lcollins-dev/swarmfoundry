@@ -3,18 +3,6 @@ import { z } from 'zod';
 import { emailAddress, password, PASSWORD_MAX_LENGTH, requestBody, text } from '../../../fields';
 import { UserRoleId } from './role';
 
-export const CanRegisterResponseDto = z.object({
-  canRegister: z.boolean(),
-});
-export type CanRegisterResponseDto = z.infer<typeof CanRegisterResponseDto>;
-
-export const RegisterRequestDto = requestBody({
-  name: text(2, 256),
-  email: emailAddress(),
-  password: password(),
-});
-export type RegisterRequestDto = z.infer<typeof RegisterRequestDto>;
-
 export const LoginRequestDto = requestBody({
   email: emailAddress(),
   password: text(0, PASSWORD_MAX_LENGTH),
@@ -51,3 +39,5 @@ export type UpdateProfileResponseDto = z.infer<typeof UpdateProfileResponseDto>;
 export * from './role';
 
 export * from './admin';
+
+export * from './password-link';

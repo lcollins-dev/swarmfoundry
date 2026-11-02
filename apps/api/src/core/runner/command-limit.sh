@@ -3,7 +3,7 @@
 #   command-limit.sh <default ms> <max ms> <background ms> <grace ms>
 # Starts command-watchdog.sh, then marks the command with a call id that every process it starts inherits, and has the
 # command's shell tell the watchdog its pid. The watchdog kills the shell, and every marked process, once the call runs
-# the grace past its limit. Needs jq and setsid.
+# the grace past its limit, and reports the kill on Claude's stderr with the call's tool_use_id. Needs jq and setsid.
 
 set -euo pipefail
 
@@ -16,8 +16,8 @@ id=$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
 # Stands in for the watchdog's pid, which is known only once the watchdog has started, after the limit.
 watchdog_pid="@watchdog-$id@"
 
-# The call's limit and its background limit, 0 in the foreground, on the first line, then the hook's answer. Nothing
-# for a call without a command.
+# The call's limit and its tool_use_id, empty where Claude gave none fit for the kill line, on the first line, then the
+# hook's answer. Nothing for a call without a command.
 answer=$(
   jq -r --arg id "$id" --arg watchdog "$watchdog_pid" --argjson default "$default_ms" --argjson max "$max_ms" \
     --argjson background "$background_ms" --argjson grace "$grace_ms" '
@@ -26,7 +26,8 @@ answer=$(
     | ($in.timeout | if type == "number" and . >= 1 then floor else null end) as $timeout
     | ($in.run_in_background == true) as $bg
     | (if $bg and $timeout == null then $background else [$timeout // $default, $max] | min end) as $limit
-    | "\($limit) \(if $bg then $limit else 0 end)", ({
+    | (.tool_use_id | if type == "string" and test("^toolu_[A-Za-z0-9_]+$") then . else "" end) as $tool_use_id
+    | "\($limit) \($tool_use_id)", ({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "allow",
@@ -44,9 +45,9 @@ answer=$(
               else $in.command | split("\n")[0] | .[0:80] end
             )
           }
-          # Past the kill, so Claude keeps the call in the foreground and the agent reads the reason in its result. A
-          # background call gets its limit, so Claude stops it where the watchdog takes it to be stopped.
-          + {timeout: (if $bg then $limit else $limit + $grace + 10000 end)})
+          # Past the kill, so only the watchdog stops a call, and Claude keeps a foreground one in the foreground for the
+          # agent to read the reason in its result.
+          + {timeout: ($limit + $grace + 10000)})
         }
       } | tojson)'
 )
@@ -55,7 +56,7 @@ answer=$(
 
 limits=${answer%%$'\n'*}
 limit_ms=${limits% *}
-background_limit_ms=${limits#* }
+tool_use_id=${limits#* }
 deadline_ms=$((limit_ms + grace_ms))
 reason="Swarmfoundry stopped this command, and every process it started, after $((deadline_ms / 1000))s: its limit of $((limit_ms / 1000))s plus $((grace_ms / 1000))s grace."
 
@@ -69,7 +70,7 @@ read -r _ _ _ claude_pid _ < "/proc/$session/stat"
 # would otherwise let the call run unhooked.
 read -r -t 5 pid < <(
   SWARMFOUNDRY_REASON=$reason setsid bash --norc --noprofile "$(dirname "$0")/command-watchdog.sh" \
-    "$id" "$deadline_ms" "$claude_pid" "$background_limit_ms" < /dev/null 2> /dev/null
+    "$id" "$deadline_ms" "$claude_pid" "$tool_use_id" < /dev/null 2> /dev/null
 )
 [[ "$pid" =~ ^[0-9]+$ ]] || exit 1
 

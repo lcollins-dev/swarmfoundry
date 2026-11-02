@@ -5,15 +5,15 @@ import type { Run } from '@/core/task/entities/run.entity';
 import type { Task } from '@/core/task/entities/task.entity';
 
 import { FailureReportService } from './failure-report.service';
+import { byArrival, QueueSlotsService } from './queue-slots.service';
 import { RunJudgeService } from './run-judge.service';
 import { TaskCheckService } from './task-check.service';
 import { StepExecutorService } from '@/core/actions/step-executor.service';
 import { FoundryConfigService } from '@/core/foundry-config/foundry-config.service';
 import { TaskService } from '@/core/task/task.service';
 
-import type { IActionAgent, IStepRequest } from '@/core/actions/actions.types';
-import type { ITriggerConfig } from '@/core/foundry-config/foundry-config.types';
-import { stepsIn } from '@/core/task/step-list';
+import type { IStepRequest } from '@/core/actions/types/actions.types';
+import type { ITriggerConfig } from '@/core/foundry-config/types/foundry-config.types';
 import {
   DeploymentFault,
   RunEndReason,
@@ -23,7 +23,8 @@ import {
   type IRunJudgement,
   type IRunReport,
   type TaskNext,
-} from '@/core/task/task.types';
+} from '@/core/task/types/task.types';
+import { stepsIn } from '@/core/task/utils/step-list.util';
 
 const ERROR_MAX_LENGTH = 2000;
 const NO_ERROR_MESSAGE = 'The runner failed without a message';
@@ -40,14 +41,6 @@ export const CHECK_RETRY_MS = 60_000;
 export const STEP_TRY_DELAYS_MS: readonly number[] = [300_000, 900_000];
 
 type RunStep = (request: IStepRequest) => Promise<IRunReport>;
-
-/** The steps of one list of a trigger in the running config that resolve to one agent, or to none. */
-interface ILane {
-  trigger: ITriggerConfig;
-  list: StepList;
-  steps: number[];
-  agent: IActionAgent | null;
-}
 
 interface IStartable {
   trigger: ITriggerConfig;
@@ -88,7 +81,8 @@ export class TaskQueueService {
     private readonly taskCheckService: TaskCheckService,
     private readonly runJudgeService: RunJudgeService,
     private readonly failureReportService: FailureReportService,
-    private readonly stepExecutorService: StepExecutorService
+    private readonly stepExecutorService: StepExecutorService,
+    private readonly queueSlotsService: QueueSlotsService
   ) {}
 
   /** Never rejects. A call during a pass makes that pass run once more. */
@@ -340,36 +334,12 @@ export class TaskQueueService {
    * its step's agent's, so a task between steps on two agents keeps its place against newer tasks.
    */
   private async pickStartable(triggers: readonly ITriggerConfig[], now: Date): Promise<IStartable[]> {
-    const lanes = this.lanesOf(triggers);
-    const [triggerRunning, laneRunning] = await Promise.all([
-      Promise.all(triggers.map(trigger => this.taskService.countRunning(trigger.name))),
-      Promise.all(lanes.map(lane => this.taskService.countRunning(lane.trigger.name, lane))),
-    ]);
-
-    const triggerFree = new Map(
-      triggers.map((trigger, index) => [trigger.name, trigger.concurrency - triggerRunning[index]])
-    );
-    const agentFree = new Map<string, number>();
-
-    for (const [index, { agent }] of lanes.entries()) {
-      if (agent !== null) {
-        agentFree.set(agent.name, (agentFree.get(agent.name) ?? agent.concurrency ?? Infinity) - laneRunning[index]);
-      }
-    }
-
-    const freeSlots = ({ trigger, agent }: ILane): number =>
-      Math.min(triggerFree.get(trigger.name) ?? 0, agent === null ? Infinity : (agentFree.get(agent.name) ?? 0));
-
-    const byArrival = (left: Task, right: Task): number => {
-      const byDate = left.queuedDate.getTime() - right.queuedDate.getTime();
-
-      return byDate === 0 ? left.id - right.id : byDate;
-    };
+    const slots = await this.queueSlotsService.read(triggers);
 
     const candidates = (
       await Promise.all(
-        lanes.map(async lane => {
-          const free = freeSlots(lane);
+        slots.lanes.map(async lane => {
+          const free = slots.free(lane);
           const tasks = free > 0 ? await this.taskService.findStartable(lane.trigger.name, lane, now, free) : [];
 
           return tasks.map(task => ({ lane, task }));
@@ -382,38 +352,13 @@ export class TaskQueueService {
     const picked: IStartable[] = [];
 
     for (const { lane, task } of candidates) {
-      if (freeSlots(lane) > 0) {
+      if (slots.free(lane) > 0) {
         picked.push({ trigger: lane.trigger, task });
-        triggerFree.set(lane.trigger.name, (triggerFree.get(lane.trigger.name) ?? 0) - 1);
-
-        if (lane.agent !== null) {
-          agentFree.set(lane.agent.name, (agentFree.get(lane.agent.name) ?? 0) - 1);
-        }
+        slots.take(lane);
       }
     }
 
     return picked;
-  }
-
-  private lanesOf(triggers: readonly ITriggerConfig[]): ILane[] {
-    return triggers.flatMap(trigger =>
-      [StepList.STEPS, StepList.FAILURE_STEPS].flatMap(list => {
-        const byAgent = new Map<string | null, ILane>();
-
-        for (const [index, step] of stepsIn(trigger, list).entries()) {
-          const agent = this.stepExecutorService.agentOf(step);
-          const lane = byAgent.get(agent?.name ?? null);
-
-          if (lane === undefined) {
-            byAgent.set(agent?.name ?? null, { trigger, list, steps: [index], agent });
-          } else {
-            lane.steps.push(index);
-          }
-        }
-
-        return [...byAgent.values()];
-      })
-    );
   }
 
   /** Cancels a task whose issue no longer wants it, and holds back one whose issue could not be read. */

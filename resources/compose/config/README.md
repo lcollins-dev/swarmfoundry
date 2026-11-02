@@ -100,5 +100,16 @@ agent sessions. Opening a new merge request resets the requests-for-changes coun
 ### Merged
 
 When a merge request into `main` merges, this static trigger sets `workflow::merged` on the related issue and clears
-`foundry::needs-human`. It uses the `(#<iid>)` suffix in the merge request title, or the single related issue in the
-same project reported by GitLab.
+`foundry::needs-human`. It uses the issue a `#<iid>` in the merge request title names - the only one, or the one
+ending the title when there are several - or else the single related issue in the same project reported by GitLab.
+
+## Agent commands
+
+Swarmfoundry stops an agent's Bash command, and every process it started, a minute past its timeout. A command gets
+2 minutes without a `timeout`, a `run_in_background` one 10 minutes, and none more than 10 minutes, where Claude Code
+alone allows 2 hours. Set `BASH_DEFAULT_TIMEOUT_MS` or `BASH_MAX_TIMEOUT_MS` in the environment's `env` to change them. An
+untimed `run_in_background` command keeps its 10 minutes unless `BASH_DEFAULT_TIMEOUT_MS` is larger.
+
+Claude's own sandbox is always off, as it would hide commands from the limit. The image in
+[`agent/Dockerfile`](../agent/Dockerfile) has the bash 5, `jq` and `setsid` the limit runs on; keep them in a custom
+image. See the [deployment guide](../../../DEPLOYMENT.md#agent-commands) for more.

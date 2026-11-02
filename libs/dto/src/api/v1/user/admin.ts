@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { emailAddress, enumList, enumValue, flag, password, requestBody, text, timestamp } from '../../../fields';
+import { emailAddress, enumList, enumValue, flag, requestBody, text, timestamp } from '../../../fields';
 import { UserRoleId } from './role';
 
 export enum UserListStatus {
@@ -24,6 +24,8 @@ export const ListUserDto = z.object({
   email: z.string(),
   enabled: z.boolean(),
   userRoleIds: z.array(z.number()),
+  /** Invited and yet to choose a password, so unable to sign in. */
+  invited: z.boolean(),
   lastAccess: timestamp(),
   createdDate: timestamp(),
 });
@@ -62,22 +64,30 @@ export type UserStatsResponseDto = z.infer<typeof UserStatsResponseDto>;
 export const UpdateUserRequestDto = requestBody({
   name: text(2, 256),
   email: emailAddress(),
-  password: password().optional(),
   userRoleIds: enumList(UserRoleId),
 });
 export type UpdateUserRequestDto = z.infer<typeof UpdateUserRequestDto>;
 
-export const CreateUserRequestDto = requestBody({
+export const InviteUserRequestDto = requestBody({
   name: text(2, 256),
   email: emailAddress(),
-  password: password(),
   userRoleIds: enumList(UserRoleId),
 });
-export type CreateUserRequestDto = z.infer<typeof CreateUserRequestDto>;
+export type InviteUserRequestDto = z.infer<typeof InviteUserRequestDto>;
 
-/** The new user's id. */
-export const CreateUserResponseDto = z.number();
-export type CreateUserResponseDto = z.infer<typeof CreateUserResponseDto>;
+export const PasswordLinkDto = z.object({
+  link: z.string(),
+  expiresAt: timestamp(),
+  /** False when the email failed or no email transport is set up, so the admin hands the link over. */
+  emailed: z.boolean(),
+});
+export type PasswordLinkDto = z.infer<typeof PasswordLinkDto>;
+
+export const InviteUserResponseDto = z.object({
+  userId: z.number(),
+  passwordLink: PasswordLinkDto,
+});
+export type InviteUserResponseDto = z.infer<typeof InviteUserResponseDto>;
 
 export const UpdateStateRequestDto = requestBody({
   enabled: flag(),

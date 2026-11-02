@@ -11,7 +11,7 @@ export const COMMAND_WATCHDOG_PATH = '/foundry/command-watchdog.sh';
 
 export const COMMAND_GRACE_MS = 60_000;
 
-/** Claude Code's own limits for a Bash call. See the runner design, "Command limits". */
+/** Claude Code's own limits for a Bash call, which the command limit mirrors and stops a command a grace period past. */
 export const CLAUDE_DEFAULT_TIMEOUT_MS = 120_000;
 export const CLAUDE_MAX_TIMEOUT_MS = 600_000;
 export const CLAUDE_BACKGROUND_LIMIT_MS = 600_000;
@@ -22,9 +22,12 @@ const CLAUDE_TIMEOUT_HEADROOM_MS = 20_000;
 /** The hook runs with only this `PATH`, so the image check looks for its tools there. */
 export const COMMAND_LIMIT_SEARCH_PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
 
-/** The line the watchdog appends to a stopped command's output, alone on its line. */
-export const COMMAND_STOPPED_LINE =
-  /^Swarmfoundry stopped this command, and every process it started, after \d+s: its limit of \d+s plus \d+s grace\.$/m;
+/**
+ * The line the watchdog writes to Claude's stderr on a kill, with the call's tool use id or none, and the epoch ms.
+ * It is matched at the end of a stderr line, as the watchdog can append it to Claude's unfinished stderr. The id shape
+ * matches the hook's check in `command-limit.sh`, so no other text is ever read as an id.
+ */
+export const COMMAND_KILLED_LINE = /Swarmfoundry: the command limit stopped tool call ((?:toolu_\w+)?) at (\d+)\.$/;
 
 /** Past the hook's worst case, bash retrying a fork for 15 seconds, as Claude runs a call whose hook timed out. */
 const HOOK_TIMEOUT_SECONDS = 30;

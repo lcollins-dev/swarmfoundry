@@ -19,7 +19,7 @@ export class SetupCheckService implements OnApplicationBootstrap {
     for (const user of pending) {
       this.logger.warn(
         { email: user.email },
-        'onApplicationBootstrap(): An account still has its initial password - sign in to the web app and set your own now'
+        'onApplicationBootstrap(): An account still has its initial password - sign in to the console and set your own now'
       );
     }
   }

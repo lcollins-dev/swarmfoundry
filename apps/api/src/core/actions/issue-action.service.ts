@@ -4,10 +4,10 @@ import { FoundryConfigService } from '@/core/foundry-config/foundry-config.servi
 import { IssueSourceService } from '@/core/issue-source/issue-source.service';
 import { TaskService } from '@/core/task/task.service';
 
-import type { IActionAgent, IActionHandler, IFailureMessage, IStepRequest } from './actions.types';
-import type { IStaticStepConfig } from '@/core/foundry-config/foundry-config.types';
+import type { IActionAgent, IActionHandler, IFailureMessage, IStepRequest } from './types/actions.types';
+import type { IStaticStepConfig } from '@/core/foundry-config/types/foundry-config.types';
 import { GitLabApiError } from '@/core/issue-source/gitlab-api.error';
-import { DeploymentFault, RunOutcome, type IRunJudgement, type IRunReport } from '@/core/task/task.types';
+import { DeploymentFault, RunOutcome, type IRunJudgement, type IRunReport } from '@/core/task/types/task.types';
 
 const UNAUTHORIZED = 401;
 const TOO_MANY_REQUESTS = 429;

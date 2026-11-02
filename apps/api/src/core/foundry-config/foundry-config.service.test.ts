@@ -23,8 +23,8 @@ import type {
   ILoadedFoundryConfig,
   IPromptContext,
   ITriggerConfig,
-} from '@/core/foundry-config/foundry-config.types';
-import type { IAgentStepConfig, IStepConfig } from '@/core/foundry-config/foundry-config.types';
+} from '@/core/foundry-config/types/foundry-config.types';
+import type { IAgentStepConfig, IStepConfig } from '@/core/foundry-config/types/foundry-config.types';
 
 const isAgentStep = (step: IStepConfig): step is IAgentStepConfig => step.kind === 'agent';
 
@@ -90,6 +90,7 @@ const loadedWith = (token: string, triggerName: string): ILoadedFoundryConfig =>
     ],
   },
   secrets: new Set([token]),
+  files: new Map(),
 });
 
 const context: IPromptContext = {
@@ -190,7 +191,7 @@ describe('FoundryConfigService', () => {
             auth: 'apiKey',
             token: REDACTED,
             model: 'claude-opus-5-5',
-            settings: join(dirname(EXAMPLE_CONFIG), 'agents/claude/review-settings.json'),
+            settings: join(dirname(EXAMPLE_CONFIG), 'agents/claude/settings-readonly.json'),
             instructions: join(dirname(EXAMPLE_CONFIG), 'agents/claude/instructions.md'),
           },
         },
@@ -215,6 +216,13 @@ describe('FoundryConfigService', () => {
       expect(service.redactText(`${EXAMPLE_ENV.GITLAB_BOT_TOKEN} and extra-secret`, ['extra-secret'])).toBe(
         `${REDACTED} and ${REDACTED}`
       );
+    });
+
+    it('masks written text by its secrets and by the shape of each credential, leaving a ${VAR} readable', () => {
+      const placeholderUrl = 'https://bot:${PASS}@gitlab.test';
+      const text = `${EXAMPLE_ENV.GITLAB_BOT_TOKEN} https://bot:Hunter2Password@gitlab.test ${placeholderUrl}`;
+
+      expect(service.maskWritten(text)).toBe(`${REDACTED} https://bot:${REDACTED}@gitlab.test ${placeholderUrl}`);
     });
   });
 

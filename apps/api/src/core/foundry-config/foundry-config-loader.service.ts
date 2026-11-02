@@ -10,6 +10,7 @@ import { SecretRedactionService } from './secret-redaction.service';
 import { VariableSubstitutionService } from './variable-substitution.service';
 
 import { FoundryConfigError, issueAt, issuesFromZod } from './foundry-config.error';
+import { foundryConfigDocumentSchema } from './schema/document';
 import type {
   IAgentLayer,
   IAgentStepConfig,
@@ -18,8 +19,11 @@ import type {
   IConfigIssue,
   IEnvironmentConfig,
   IFoundryConfigDocument,
+  IIssueBlock,
   ILoadedFoundryConfig,
+  IMergeRequestBlock,
   IResolvedAgent,
+  IScheduleBlock,
   ISourceConfig,
   IStaticStepConfig,
   IStepConfig,
@@ -28,9 +32,8 @@ import type {
   ITriggerDefinition,
   KeyPath,
   TriggerKind,
-} from './foundry-config.types';
-import { foundryConfigDocumentSchema } from './schema/document';
-import { triggerKindOf } from './trigger-kind';
+} from './types/foundry-config.types';
+import { triggerKindOf } from './utils/trigger-kind.util';
 
 const KIND_DESCRIPTIONS: Record<TriggerKind, string> = {
   issue: '',
@@ -39,7 +42,9 @@ const KIND_DESCRIPTIONS: Record<TriggerKind, string> = {
 };
 
 /** What an issue trigger with no `failureSteps` runs. `failureSteps: []` runs nothing. */
-export const DEFAULT_ISSUE_FAILURE_STEPS: readonly IStepConfig[] = [{ kind: 'comment', body: '{{failure.report}}' }];
+export const DEFAULT_ISSUE_FAILURE_STEPS: readonly IStepConfig[] = [
+  { kind: 'comment', body: '{{failure.report}}', written: { body: '{{failure.report}}' } },
+];
 
 /** Stops a small file unfolding into a huge one through aliases. */
 const MAX_ALIAS_COUNT = 100;
@@ -59,7 +64,11 @@ interface ILoadContext {
   directory: string;
   root?: string;
   document: IFoundryConfigDocument;
+
+  /** The tree before `${VAR}` is substituted, shaped as `document` was before parsing. */
+  written: unknown;
   issues: IConfigIssue[];
+  files: Map<string, string>;
 }
 
 interface ITemplateRules {
@@ -125,7 +134,14 @@ export class FoundryConfigLoaderService {
       throw fail(issuesFromZod(parsed.error.issues));
     }
 
-    const context: ILoadContext = { directory, root: rules.root, document: parsed.data, issues: [] };
+    const context: ILoadContext = {
+      directory,
+      root: rules.root,
+      document: parsed.data,
+      written: yaml.tree,
+      issues: [],
+      files: new Map([[path, text]]),
+    };
 
     this.checkAgentFiles(context);
 
@@ -147,6 +163,7 @@ export class FoundryConfigLoaderService {
         triggers,
       },
       secrets,
+      files: context.files,
     };
   }
 
@@ -214,7 +231,13 @@ export class FoundryConfigLoaderService {
   }
 
   private buildSources(context: ILoadContext): ReadonlyMap<string, ISourceConfig> {
-    return new Map(Object.entries(context.document.sources).map(([name, source]) => [name, { name, ...source }]));
+    return new Map(
+      Object.entries(context.document.sources).map(([name, source]) => {
+        const written = { url: this.writtenText(context, ['sources', name, 'url'], source.url) };
+
+        return [name, { name, ...source, written }];
+      })
+    );
   }
 
   private buildEnvironments(context: ILoadContext): IEnvironments {
@@ -263,7 +286,15 @@ export class FoundryConfigLoaderService {
     }
 
     const { concurrency, issue, schedule, mergeRequest } = trigger;
-    const fields = { name, source, steps, failureSteps, concurrency };
+    const written = {
+      issue: issue === undefined ? undefined : this.writtenIssue(context, [...keyPath, 'issue'], issue),
+      schedule: schedule === undefined ? undefined : this.writtenSchedule(context, [...keyPath, 'schedule'], schedule),
+      mergeRequest:
+        mergeRequest === undefined
+          ? undefined
+          : this.writtenMergeRequest(context, [...keyPath, 'mergeRequest'], mergeRequest),
+    };
+    const fields = { name, source, steps, failureSteps, concurrency, written };
 
     if (schedule !== undefined) {
       return { ...fields, schedule };
@@ -304,7 +335,7 @@ export class FoundryConfigLoaderService {
       return this.buildAgentStep(context, step.agent, templates, [...keyPath, 'agent'], environments);
     }
 
-    const staticStep = this.staticStepOf(step);
+    const staticStep = this.staticStepOf(context, step, keyPath);
 
     if (staticStep === undefined) {
       return undefined;
@@ -325,16 +356,30 @@ export class FoundryConfigLoaderService {
     return staticStep;
   }
 
-  private staticStepOf(step: IStepDefinition): IStaticStepConfig | undefined {
+  private staticStepOf(context: ILoadContext, step: IStepDefinition, keyPath: KeyPath): IStaticStepConfig | undefined {
     if (step.relabel !== undefined) {
-      return { kind: 'relabel', add: step.relabel.add, remove: step.relabel.remove };
+      const { add, remove } = step.relabel;
+      const written = {
+        add: this.writtenList(context, [...keyPath, 'relabel', 'add'], add),
+        remove: this.writtenList(context, [...keyPath, 'relabel', 'remove'], remove),
+      };
+
+      return { kind: 'relabel', add, remove, written };
     }
 
     if (step.comment !== undefined) {
-      return { kind: 'comment', body: step.comment };
+      const written = { body: this.writtenText(context, [...keyPath, 'comment'], step.comment) };
+
+      return { kind: 'comment', body: step.comment, written };
     }
 
-    return step.assign === undefined ? undefined : { kind: 'assign', usernames: step.assign };
+    if (step.assign === undefined) {
+      return undefined;
+    }
+
+    const written = { usernames: this.writtenList(context, [...keyPath, 'assign'], step.assign) };
+
+    return { kind: 'assign', usernames: step.assign, written };
   }
 
   private buildAgentStep(
@@ -345,7 +390,7 @@ export class FoundryConfigLoaderService {
     environments: IEnvironments
   ): IAgentStepConfig | undefined {
     const environment = environments.configs.get(step.environment);
-    let agent: IResolvedAgent | undefined;
+    let resolved: { agent: IResolvedAgent; origins: ReadonlyMap<string, KeyPath> } | undefined;
 
     if (environment === undefined) {
       context.issues.push(
@@ -359,7 +404,7 @@ export class FoundryConfigLoaderService {
       if (layers.length === 0) {
         context.issues.push(issueAt([...keyPath, 'agent'], 'must name an agent, here or on the environment'));
       } else {
-        agent = this.resolveAgent(context, layers);
+        resolved = this.resolveAgent(context, layers);
       }
     }
 
@@ -369,11 +414,21 @@ export class FoundryConfigLoaderService {
         ? undefined
         : this.readPrompt(context, step.systemPrompt, templates, [...keyPath, 'systemPrompt']);
 
-    if (environment === undefined || agent === undefined || prompt === undefined) {
+    if (environment === undefined || resolved === undefined || prompt === undefined) {
       return undefined;
     }
 
-    return { kind: 'agent', environment, agent, prompt, systemPrompt, timeout: step.timeout };
+    const { agent, origins } = resolved;
+    const written = {
+      model: this.writtenText(context, origins.get('model') ?? [], agent.model),
+      prompt: this.writtenText(context, [...keyPath, 'prompt'], step.prompt),
+      systemPrompt:
+        step.systemPrompt === undefined
+          ? undefined
+          : this.writtenText(context, [...keyPath, 'systemPrompt'], step.systemPrompt),
+    };
+
+    return { kind: 'agent', environment, agent, prompt, systemPrompt, timeout: step.timeout, written };
   }
 
   private checkTriggerProjects(
@@ -401,7 +456,10 @@ export class FoundryConfigLoaderService {
     }
   }
 
-  private resolveAgent(context: ILoadContext, layers: readonly IAgentLayer[]): IResolvedAgent | undefined {
+  private resolveAgent(
+    context: ILoadContext,
+    layers: readonly IAgentLayer[]
+  ): { agent: IResolvedAgent; origins: ReadonlyMap<string, KeyPath> } | undefined {
     const result = this.agentResolutionService.resolve(context.document.agents, layers);
 
     if (!result.ok) {
@@ -420,7 +478,62 @@ export class FoundryConfigLoaderService {
         ? undefined
         : this.readFile(context, agent.instructions, origins.get('instructions') ?? []);
 
-    return { ...agent, name, settings, instructions };
+    return { agent: { ...agent, name, settings, instructions }, origins };
+  }
+
+  private writtenIssue(context: ILoadContext, keyPath: KeyPath, issue: IIssueBlock): IIssueBlock {
+    const list = (key: string, resolved: readonly string[]) => this.writtenList(context, [...keyPath, key], resolved);
+
+    return {
+      labels: list('labels', issue.labels),
+      notLabels: list('notLabels', issue.notLabels),
+      anyAssignee: list('anyAssignee', issue.anyAssignee),
+      projects: list('projects', issue.projects),
+      expect: { anyLabel: this.writtenList(context, [...keyPath, 'expect', 'anyLabel'], issue.expect.anyLabel) },
+    };
+  }
+
+  private writtenSchedule(context: ILoadContext, keyPath: KeyPath, schedule: IScheduleBlock): IScheduleBlock {
+    return {
+      cron: this.writtenText(context, [...keyPath, 'cron'], schedule.cron),
+      project: this.writtenText(context, [...keyPath, 'project'], schedule.project),
+    };
+  }
+
+  private writtenMergeRequest(
+    context: ILoadContext,
+    keyPath: KeyPath,
+    mergeRequest: IMergeRequestBlock
+  ): IMergeRequestBlock {
+    const list = (key: string, resolved: readonly string[]) => this.writtenList(context, [...keyPath, key], resolved);
+    const { event, targetBranch } = mergeRequest;
+
+    return {
+      event,
+      targetBranch:
+        targetBranch === undefined ? undefined : this.writtenText(context, [...keyPath, 'targetBranch'], targetBranch),
+      labels: list('labels', mergeRequest.labels),
+      notLabels: list('notLabels', mergeRequest.notLabels),
+      projects: list('projects', mergeRequest.projects),
+    };
+  }
+
+  /**
+   * The string at `keyPath` as the file writes it. `resolved` only where the file writes none, as for a default, which
+   * no `${VAR}` can reach.
+   */
+  private writtenText(context: ILoadContext, keyPath: KeyPath, resolved: string): string {
+    let node = context.written;
+
+    for (const key of keyPath) {
+      node = typeof node === 'object' && node !== null && Object.hasOwn(node, key) ? Reflect.get(node, key) : undefined;
+    }
+
+    return typeof node === 'string' ? node : resolved;
+  }
+
+  private writtenList(context: ILoadContext, keyPath: KeyPath, resolved: readonly string[]): string[] {
+    return resolved.map((item, index) => this.writtenText(context, [...keyPath, index], item));
   }
 
   private readFile(context: ILoadContext, relativePath: string, keyPath: KeyPath): IConfigFile | undefined {
@@ -433,7 +546,10 @@ export class FoundryConfigLoaderService {
     }
 
     try {
-      return { path: absolutePath, content: readFileSync(absolutePath, 'utf8') };
+      const content = readFileSync(absolutePath, 'utf8');
+      context.files.set(absolutePath, content);
+
+      return { path: absolutePath, content };
     } catch (error) {
       context.issues.push(issueAt(keyPath, `cannot read ${absolutePath} (${this.errorCode(error)})`));
 

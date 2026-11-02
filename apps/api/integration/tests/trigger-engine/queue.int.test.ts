@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { createIssueEvent, createTestTrigger, startTestEngine } from '../../factories/trigger-engine.factory';
 import { bootstrapApp } from '../../setup';
 import { dbQuery } from '../../utils/db';
-import type { ITriggerConfig } from '@/core/foundry-config/foundry-config.types';
+import type { ITriggerConfig } from '@/core/foundry-config/types/foundry-config.types';
 
 describe('Task queue (integration)', () => {
   let app: NestExpressApplication;

@@ -5,18 +5,12 @@ import { computed, ref } from 'vue';
 import type { ProfileResponseDto, UserRoleId } from '@libs/dto';
 
 export const useUserStore = defineStore('user', () => {
-  const canRegister = ref<boolean | null>(null);
-
   const token = useLocalStorage<string | null>('token', () => null);
   const profile = ref<ProfileResponseDto | null>(null);
 
   const loggedIn = computed(() => token.value !== null);
 
   const sessionEnded = ref(false);
-
-  function setCanRegister(newCanRegister: boolean) {
-    canRegister.value = newCanRegister;
-  }
 
   function setToken(newToken: string | null) {
     sessionEnded.value = false;
@@ -45,12 +39,10 @@ export const useUserStore = defineStore('user', () => {
   }
 
   return {
-    canRegister,
     token,
     profile,
     loggedIn,
     sessionEnded,
-    setCanRegister,
     setToken,
     setProfile,
     clearAuth,

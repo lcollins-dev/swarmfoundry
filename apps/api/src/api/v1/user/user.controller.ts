@@ -1,10 +1,8 @@
-import { Body, Controller, Get, Logger, NotFoundException, Patch, Post, SetMetadata } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, SetMetadata } from '@nestjs/common';
 
 import {
-  CanRegisterResponseDto,
   LoginRequestDto,
   ProfileResponseDto,
-  RegisterRequestDto,
   TokenResponseDto,
   UpdateProfileRequestDto,
   UpdateProfileResponseDto,
@@ -17,56 +15,11 @@ import { ZodPipe } from '@/common/pipes/zod.pipe';
 
 import { User } from '@/core/user/entities/user.entity';
 
-import { SysConfigService } from '@/core/sys-config/sys-config.service';
 import { UserService } from '@/core/user/user.service';
 
 @Controller('api/v1/user')
 export class UserController {
-  private readonly logger = new Logger(UserController.name);
-
-  constructor(
-    private readonly sysConfigService: SysConfigService,
-    private readonly userService: UserService
-  ) {}
-
-  @NoAuth()
-  @Get('register')
-  async canRegister(): Promise<CanRegisterResponseDto> {
-    const sysConfig = await this.sysConfigService.getSysConfig();
-
-    return {
-      canRegister: sysConfig.registrationEnabled,
-    };
-  }
-
-  @NoAuth()
-  @Post('register')
-  async register(
-    @Body(new ZodPipe(RegisterRequestDto)) registerRequest: RegisterRequestDto
-  ): Promise<TokenResponseDto> {
-    const sysConfig = await this.sysConfigService.getSysConfig();
-
-    if (!sysConfig.registrationEnabled) {
-      this.logger.warn(
-        { email: registerRequest.email },
-        `register(): Registration attempted but registrations are disabled, 404 returned`
-      );
-
-      throw new NotFoundException();
-    }
-
-    const user = await this.userService.createUser(
-      registerRequest.name,
-      registerRequest.email,
-      registerRequest.password,
-      [],
-      true
-    );
-
-    return {
-      token: await this.userService.createLoginToken(user),
-    };
-  }
+  constructor(private readonly userService: UserService) {}
 
   @NoAuth()
   @Post('login')

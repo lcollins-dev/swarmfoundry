@@ -3,6 +3,8 @@ import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryHistory, createRouter } from 'vue-router';
 
+import { UserRoleId } from '@libs/dto';
+
 import { useErrorStore } from '@/stores/error';
 import { useUserStore } from '@/stores/user';
 
@@ -35,7 +37,7 @@ describe('First-time setup page', () => {
     useUserStore().setProfile({
       name: 'Admin',
       email: 'admin@example.com',
-      userRoleIds: [],
+      userRoleIds: [UserRoleId.SYSTEM_ADMIN],
       mustChangePassword: true,
     });
   });
@@ -58,7 +60,7 @@ describe('First-time setup page', () => {
     expect(useErrorStore().getFieldError('setup', 'confirmPassword')).toBeDefined();
   });
 
-  it('saves the new email and password together, then opens the dashboard', async () => {
+  it('saves the new email and password together, then opens the overview', async () => {
     const { router, wrapper } = await mountPage();
 
     await wrapper.find('input[name="email"]').setValue(' me@example.com ');
@@ -71,6 +73,6 @@ describe('First-time setup page', () => {
       { name: 'Admin', email: 'me@example.com', password: 'S3tup$Done' },
       'setup'
     );
-    expect(router.currentRoute.value.path).toBe('/dashboard');
+    expect(router.currentRoute.value.path).toBe('/overview');
   });
 });

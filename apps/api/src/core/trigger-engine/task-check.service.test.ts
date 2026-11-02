@@ -12,9 +12,9 @@ import type {
   IIssueTriggerConfig,
   IMergeRequestTriggerConfig,
   IScheduleTriggerConfig,
-} from '@/core/foundry-config/foundry-config.types';
-import type { IIssueState } from '@/core/issue-source/issue-source.types';
-import { StepList } from '@/core/task/task.types';
+} from '@/core/foundry-config/types/foundry-config.types';
+import type { IIssueState } from '@/core/issue-source/types/issue-source.types';
+import { StepList } from '@/core/task/types/task.types';
 
 const TOKEN = 'glpat-orchestrator';
 

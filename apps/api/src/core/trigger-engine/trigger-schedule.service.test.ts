@@ -8,8 +8,8 @@ import { SCHEDULE_TICK_MS, TriggerScheduleService } from './trigger-schedule.ser
 import type { FoundryConfigService } from '@/core/foundry-config/foundry-config.service';
 import type { TaskService } from '@/core/task/task.service';
 
-import type { ITriggerConfig } from '@/core/foundry-config/foundry-config.types';
-import { type IScheduledTaskFields, TaskStatus } from '@/core/task/task.types';
+import type { ITriggerConfig } from '@/core/foundry-config/types/foundry-config.types';
+import { type IScheduledTaskFields, TaskStatus } from '@/core/task/types/task.types';
 
 const scheduled = (name: string, cron: string) =>
   ({

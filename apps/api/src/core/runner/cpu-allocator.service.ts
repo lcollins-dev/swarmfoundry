@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
-import type { ICpuMove } from './runner.types';
+import type { ICpuMove } from './types/runner.types';
 
 interface IAllocation {
   /** The agent's container name or id. */

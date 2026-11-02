@@ -3,7 +3,7 @@ set -e
 
 # Runs the api integration suite against its own "swarmfoundry_int" database, recreated and
 # migrated per run by the vitest global setup, in the same Postgres as the development
-# database. The database has to already be running - see the dev-instance skill.
+# database. The database has to already be running - start it with `npm run instance:start`.
 #
 # CI can call vitest directly instead, exporting the same TYPEORM_* variables.
 

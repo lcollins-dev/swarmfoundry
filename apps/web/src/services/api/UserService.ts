@@ -1,7 +1,5 @@
 import {
-  CanRegisterResponseDto,
   type LoginRequestDto,
-  type RegisterRequestDto,
   type UpdateProfileRequestDto,
   ProfileResponseDto,
   TokenResponseDto,
@@ -26,34 +24,6 @@ export const useUserService = () => {
 
   const apiService = useApiService();
   const errorService = useErrorService();
-
-  async function canRegister(): Promise<CanRegisterResponseDto> {
-    const canRegisterResponse = await apiService
-      .makeRequest('user/register', RequestType.GET, { response: CanRegisterResponseDto })
-      .catch((error: unknown) => errorService.handleError(error));
-
-    userStore.setCanRegister(canRegisterResponse.canRegister);
-
-    return canRegisterResponse;
-  }
-
-  async function register(registerRequest: RegisterRequestDto, form: string | null = null): Promise<TokenResponseDto> {
-    const tokenResponse = await apiService
-      .makeRequest('user/register', RequestType.POST, {
-        response: TokenResponseDto,
-        form,
-        body: registerRequest,
-      })
-      .finally(() => errorService.clearValidationError())
-      .catch((error: unknown) => errorService.handleError(error));
-
-    notificationStore.clearAllNotifications();
-    userStore.setToken(tokenResponse.token);
-
-    await getProfile();
-
-    return tokenResponse;
-  }
 
   async function login(loginRequest: LoginRequestDto, form: string | null = null): Promise<TokenResponseDto> {
     const tokenResponse = await apiService
@@ -123,5 +93,5 @@ export const useUserService = () => {
       });
   }
 
-  return { canRegister, register, login, getProfile, updateProfile, logout };
+  return { login, getProfile, updateProfile, logout };
 };

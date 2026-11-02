@@ -7,6 +7,7 @@ import { FoundryConfigService } from '@/core/foundry-config/foundry-config.servi
 
 import { errorText, GitLabUnknownUserError } from './gitlab-api.error';
 import { SILENT_EDIT_WINDOW_MS, WATERMARK_OVERLAP_MS } from './gitlab-polling.constants';
+import type { IGitLabIssue, IGitLabLabelEvent, IGitLabNote } from './schema/gitlab';
 import type {
   IIssueAssignment,
   IIssueEvent,
@@ -14,11 +15,11 @@ import type {
   IIssueProject,
   IIssueSource,
   IIssueState,
+  IProjectFailure,
   IRequestLimits,
   SourceEventHandler,
-} from './issue-source.types';
-import type { IGitLabIssue, IGitLabLabelEvent, IGitLabNote } from './schema/gitlab';
-import type { ISourceConfig, MergeRequestEventKind } from '@/core/foundry-config/foundry-config.types';
+} from './types/issue-source.types';
+import type { ISourceConfig, MergeRequestEventKind } from '@/core/foundry-config/types/foundry-config.types';
 
 export const MAX_ISSUE_ATTEMPTS = 3;
 export const MAX_EMITTED_PER_PROJECT = 10_000;
@@ -81,7 +82,8 @@ export class GitLabSourceService implements IIssueSource {
    * issues failed, and removes the merge request watermarks of every other project and the issue watermarks of every
    * project not configured.
    */
-  async poll(source: ISourceConfig, emit: SourceEventHandler, signal: AbortSignal): Promise<void> {
+  async poll(source: ISourceConfig, emit: SourceEventHandler, signal: AbortSignal): Promise<IProjectFailure[]> {
+    const failures = new Map<string, string>();
     const loaded: number[] = [];
     const watched: number[] = [];
     const unwatched: number[] = [];
@@ -92,6 +94,8 @@ export class GitLabSourceService implements IIssueSource {
         await this.pollProject(source, configured, emit, signal);
       } catch (error) {
         signal.throwIfAborted();
+
+        failures.set(configured, this.failureText(error));
 
         this.logger.error(
           { source: source.name, project: configured, error: this.redactedMessage(error) },
@@ -128,6 +132,8 @@ export class GitLabSourceService implements IIssueSource {
       } catch (error) {
         signal.throwIfAborted();
 
+        failures.set(configured, failures.get(configured) ?? this.failureText(error));
+
         this.logger.error(
           { source: source.name, project: configured, error: this.redactedMessage(error) },
           "poll(): Failed to poll the project's merge requests, retrying on the next poll"
@@ -140,6 +146,8 @@ export class GitLabSourceService implements IIssueSource {
     if (loaded.length === source.projects.length) {
       await this.retainIssueWatermarks(source, loaded, signal);
     }
+
+    return [...failures].map(([project, error]) => ({ project, error }));
   }
 
   async readIssue(
@@ -636,6 +644,10 @@ export class GitLabSourceService implements IIssueSource {
     const byTime = left.createdAt.getTime() - right.createdAt.getTime();
 
     return byTime === 0 ? left.id - right.id : byTime;
+  }
+
+  private failureText(error: unknown): string {
+    return this.foundryConfigService.redactText(errorText(error));
   }
 
   private redactedMessage(error: unknown): unknown {

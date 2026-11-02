@@ -17,8 +17,8 @@ import { SecretRedactionService } from '@/core/foundry-config/secret-redaction.s
 import { VariableSubstitutionService } from '@/core/foundry-config/variable-substitution.service';
 
 import { ConfigError } from '@/config/config.schema';
-import type { IConfigRepo } from '@/core/foundry-config/foundry-config.types';
-import type { IAgentStepConfig, IStepConfig } from '@/core/foundry-config/foundry-config.types';
+import type { IConfigRepo } from '@/core/foundry-config/types/foundry-config.types';
+import type { IAgentStepConfig, IStepConfig } from '@/core/foundry-config/types/foundry-config.types';
 
 const isAgentStep = (step: IStepConfig): step is IAgentStepConfig => step.kind === 'agent';
 

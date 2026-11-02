@@ -13,8 +13,12 @@ export class AdminUsersPage {
     return this.page.getByPlaceholder('Search name or email', { exact: true });
   }
 
-  get newUserButton(): Locator {
-    return this.page.getByRole('button', { name: 'New User', exact: true });
+  get inviteUserButton(): Locator {
+    return this.page.getByRole('button', { name: 'Invite User', exact: true });
+  }
+
+  invitedTag(email: string): Locator {
+    return this.rowByEmail(email).getByTestId('user-invited');
   }
 
   get rows(): Locator {
@@ -30,7 +34,7 @@ export class AdminUsersPage {
   }
 
   async goto(): Promise<void> {
-    await this.page.goto(webRoute('/admin/users'));
+    await this.page.goto(webRoute('/users'));
   }
 
   async search(term: string): Promise<void> {

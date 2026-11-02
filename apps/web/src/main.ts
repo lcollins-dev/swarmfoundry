@@ -8,7 +8,6 @@ import '@fontsource/inter/600.css';
 import '@fontsource/ubuntu-mono/400.css';
 import './assets/css/main.css';
 
-import { useUserService } from './services/api/UserService';
 import { useErrorStore } from './stores/error';
 import { useLogService } from '@/services/LogService';
 
@@ -50,9 +49,3 @@ router
   .catch((error: unknown) => {
     logger.error({ error }, 'main(): Failed to resolve the first route');
   });
-
-const userService = useUserService();
-
-userService.canRegister().catch((error: unknown) => {
-  logger.error({ error }, 'main(): Failed to get can register state');
-});

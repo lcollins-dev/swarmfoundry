@@ -10,6 +10,7 @@ import { PromptTemplateService } from '@/core/foundry-config/prompt-template.ser
 import { IssueSourceService } from '@/core/issue-source/issue-source.service';
 import { TaskService } from '@/core/task/task.service';
 import { FailureReportService } from '@/core/trigger-engine/failure-report.service';
+import { QueueSlotsService } from '@/core/trigger-engine/queue-slots.service';
 import { RunJudgeService } from '@/core/trigger-engine/run-judge.service';
 import { TaskCheckService } from '@/core/trigger-engine/task-check.service';
 import { TaskQueueService } from '@/core/trigger-engine/task-queue.service';
@@ -18,22 +19,22 @@ import { TriggerEngineService } from '@/core/trigger-engine/trigger-engine.servi
 import { TriggerMatchService } from '@/core/trigger-engine/trigger-match.service';
 import { TriggerScheduleService } from '@/core/trigger-engine/trigger-schedule.service';
 
-import type { IAgentRunner, IAgentRunRequest } from '@/core/actions/actions.types';
+import type { IAgentRunner, IAgentRunRequest } from '@/core/actions/types/actions.types';
 import type {
   ICommentStepConfig,
   IPromptContext,
   IStepConfig,
   ITriggerConfig,
   MergeRequestEventKind,
-} from '@/core/foundry-config/foundry-config.types';
+} from '@/core/foundry-config/types/foundry-config.types';
 import type {
   IIssueEvent,
   IIssueState,
   IMergeRequestEvent,
   ISourceEvent,
   SourceEventHandler,
-} from '@/core/issue-source/issue-source.types';
-import { DeploymentFault, type IRunReport } from '@/core/task/task.types';
+} from '@/core/issue-source/types/issue-source.types';
+import { DeploymentFault, type IRunReport } from '@/core/task/types/task.types';
 
 export const TEST_SOURCE = 'gitlab-int';
 export const SOURCE_TOKEN = 'glpat-int-orchestrator';
@@ -62,8 +63,8 @@ export interface ITestTriggerOptions {
 }
 
 export const FAILURE_STEPS: IStepConfig[] = [
-  { kind: 'comment', body: '{{failure.report}}' },
-  { kind: 'relabel', add: [FAILED_LABEL], remove: [] },
+  { kind: 'comment', body: '{{failure.report}}', written: { body: '{{failure.report}}' } },
+  { kind: 'relabel', add: [FAILED_LABEL], remove: [], written: { add: [FAILED_LABEL], remove: [] } },
 ];
 
 export const createTestTrigger = (options: ITestTriggerOptions | number = {}): ITriggerConfig => {
@@ -446,7 +447,8 @@ export const startTestEngine = async (
     new TaskCheckService(foundryConfigService, issueSourceService, triggerMatchService, taskService),
     new RunJudgeService(foundryConfigService, issueSourceService),
     new FailureReportService(foundryConfigService, taskService, stepExecutor),
-    stepExecutor
+    stepExecutor,
+    new QueueSlotsService(taskService, stepExecutor)
   );
 
   const schedule = new TriggerScheduleService(foundryConfigService, taskService, queue);

@@ -11,6 +11,9 @@ import { AddDeploymentFaults1792875638456 } from './1792875638456-AddDeploymentF
 import { AddIssueWatermarks1792895754388 } from './1792895754388-AddIssueWatermarks';
 import { KeyTasksOnIssueChanges1792945285781 } from './1792945285781-KeyTasksOnIssueChanges';
 import { AddRunUsage1792968532047 } from './1792968532047-AddRunUsage';
+import { DropSysConfig1793554545705 } from './1793554545705-DropSysConfig';
+import { AddPasswordLinks1793557946499 } from './1793557946499-AddPasswordLinks';
+import { AddApiKeys1793559180648 } from './1793559180648-AddApiKeys';
 import { TestData9000000000000 } from './test/9000000000000-TestData';
 
 export const migrations = [
@@ -27,5 +30,8 @@ export const migrations = [
   AddIssueWatermarks1792895754388,
   KeyTasksOnIssueChanges1792945285781,
   AddRunUsage1792968532047,
+  DropSysConfig1793554545705,
+  AddPasswordLinks1793557946499,
+  AddApiKeys1793559180648,
 ];
 export const testMigrations = [TestData9000000000000];

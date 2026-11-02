@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { PromptTemplateService } from '@/core/foundry-config/prompt-template.service';
 
-import type { IPromptContext } from '@/core/foundry-config/foundry-config.types';
+import type { IPromptContext } from '@/core/foundry-config/types/foundry-config.types';
 
 const issue = { iid: 42, title: 'Fix the poller', url: 'https://gitlab.example.com/acme/app/-/issues/42' };
 

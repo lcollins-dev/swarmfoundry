@@ -4,9 +4,9 @@ import { TaskQueueService } from './task-queue.service';
 import { FoundryConfigService } from '@/core/foundry-config/foundry-config.service';
 import { TaskService } from '@/core/task/task.service';
 
-import { fireTimeAfter, fireTimeAtOrBefore } from '@/core/foundry-config/cron-schedule';
-import type { IScheduleTriggerConfig } from '@/core/foundry-config/foundry-config.types';
-import { TaskStatus } from '@/core/task/task.types';
+import type { IScheduleTriggerConfig } from '@/core/foundry-config/types/foundry-config.types';
+import { fireTimeAfter, fireTimeAtOrBefore } from '@/core/foundry-config/utils/cron-schedule.util';
+import { TaskStatus } from '@/core/task/types/task.types';
 
 /** The longest a fire time skipped for a busy trigger waits once the trigger's last task ends. */
 export const SCHEDULE_TICK_MS = 30_000;

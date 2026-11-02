@@ -13,3 +13,6 @@ export const formatNumberAbbreviated = (value: number): string => {
 
   return String(Math.round(value));
 };
+
+/** Dollars to the cent, such as `$13.04`. */
+export const formatUsd = (value: number): string => `$${value.toFixed(2)}`;

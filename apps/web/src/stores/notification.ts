@@ -19,7 +19,7 @@ export const useNotificationStore = defineStore('notification', () => {
     for (let i = notifications.value.length - 1; i >= 0; i--) {
       const checkNotification = notifications.value[i];
 
-      if (checkNotification.content === notification.content) {
+      if (checkNotification.content === notification.content && checkNotification.title === notification.title) {
         clearNotification(checkNotification.id);
       }
     }
@@ -50,8 +50,8 @@ export const useNotificationStore = defineStore('notification', () => {
     }
   }
 
-  /** A success toast: a short title and a sentence saying what happened. */
-  function addToast(title: string, content: string) {
+  /** A success toast: a short title, and a body only where it adds something the title can't. */
+  function addToast(title: string, content = '') {
     return addNotification(new Notification(content, NotificationType.SUCCESS, TOAST_TIMEOUT_MS, title));
   }
 

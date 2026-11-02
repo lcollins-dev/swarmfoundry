@@ -7,8 +7,6 @@ import { RunTranscriptLine } from './entities/run-transcript-line.entity';
 import { Run } from './entities/run.entity';
 import { Task } from './entities/task.entity';
 
-import { runEndReasonOf } from './run-end-reason';
-import { taskKindOf } from './task-kind';
 import {
   RunOutcome,
   StepList,
@@ -19,16 +17,18 @@ import {
   type IRunReport,
   type IScheduledTaskFields,
   type TaskNext,
-} from './task.types';
-import { fireTimeAfter, fireTimeBefore } from '@/core/foundry-config/cron-schedule';
+} from './types/task.types';
+import { runEndReasonOf } from './utils/run-end-reason.util';
+import { taskKindOf } from './utils/task-kind.util';
 import type {
   IMergeRequestContext,
   IPromptContext,
   IScheduleContext,
   ITriggerConfig,
-} from '@/core/foundry-config/foundry-config.types';
-import { triggerKindOf } from '@/core/foundry-config/trigger-kind';
-import type { IIssueChange, IIssueEvent, IMergeRequestEvent } from '@/core/issue-source/issue-source.types';
+} from '@/core/foundry-config/types/foundry-config.types';
+import { fireTimeAfter, fireTimeBefore } from '@/core/foundry-config/utils/cron-schedule.util';
+import { triggerKindOf } from '@/core/foundry-config/utils/trigger-kind.util';
+import type { IIssueChange, IIssueEvent, IMergeRequestEvent } from '@/core/issue-source/types/issue-source.types';
 
 /** Some steps of one of a trigger's lists. */
 export interface IListSteps {

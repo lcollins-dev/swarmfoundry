@@ -7,10 +7,10 @@ import { StepExecutorService } from '@/core/actions/step-executor.service';
 import { FoundryConfigService } from '@/core/foundry-config/foundry-config.service';
 import { TaskService } from '@/core/task/task.service';
 
-import type { IFailureMessage } from '@/core/actions/actions.types';
-import type { IFailureContext, ITriggerConfig, TriggerKind } from '@/core/foundry-config/foundry-config.types';
-import { triggerKindOf } from '@/core/foundry-config/trigger-kind';
-import type { IRunJudgement } from '@/core/task/task.types';
+import type { IFailureMessage } from '@/core/actions/types/actions.types';
+import type { IFailureContext, ITriggerConfig, TriggerKind } from '@/core/foundry-config/types/foundry-config.types';
+import { triggerKindOf } from '@/core/foundry-config/utils/trigger-kind.util';
+import type { IRunJudgement } from '@/core/task/types/task.types';
 
 export const COMMENT_TEXT_MAX_LENGTH = 4000;
 

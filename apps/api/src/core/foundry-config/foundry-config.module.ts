@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigRevision } from './entities/config-revision.entity';
 
 import { AgentResolutionService } from './agent-resolution.service';
+import { ConfigFilesService } from './config-files.service';
 import { ConfigRepoGitService } from './config-repo-git.service';
 import { ConfigRepoService } from './config-repo.service';
 import { ConfigRevisionService } from './config-revision.service';
@@ -17,6 +18,7 @@ import { VariableSubstitutionService } from './variable-substitution.service';
   imports: [TypeOrmModule.forFeature([ConfigRevision])],
   providers: [
     AgentResolutionService,
+    ConfigFilesService,
     ConfigRepoGitService,
     ConfigRepoService,
     ConfigRevisionService,
@@ -26,6 +28,6 @@ import { VariableSubstitutionService } from './variable-substitution.service';
     SecretRedactionService,
     VariableSubstitutionService,
   ],
-  exports: [FoundryConfigService],
+  exports: [FoundryConfigService, ConfigFilesService],
 })
 export class FoundryConfigModule {}

@@ -12,7 +12,7 @@ import { UserUserRole } from './user-user-role.entity';
 
 @Entity()
 export class User {
-  constructor(fields: { name: string; email: string; passwordHash: string; mustChangePassword?: boolean }) {
+  constructor(fields: { name: string; email: string; passwordHash: string | null; mustChangePassword?: boolean }) {
     this.sessionUuid = null;
 
     this.name = fields.name;
@@ -35,8 +35,9 @@ export class User {
   @Column({ type: 'varchar', length: 512 })
   email: string;
 
-  @Column({ type: 'varchar', length: 256 })
-  passwordHash: string;
+  /** Null for an invited user until they choose a password through their link. */
+  @Column({ type: 'varchar', length: 256, nullable: true })
+  passwordHash: string | null;
 
   @Column({ type: 'varchar', length: 512, nullable: true })
   sessionUuid: string | null;

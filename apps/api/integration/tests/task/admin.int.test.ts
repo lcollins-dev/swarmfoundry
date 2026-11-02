@@ -10,7 +10,7 @@ import type { Task } from '@/core/task/entities/task.entity';
 
 import { TaskService } from '@/core/task/task.service';
 
-import { getRun, getTask, getTaskList, getTranscript } from '../../clients/task.client';
+import { getRun, getTask, getTaskList, getTranscript, streamTranscript } from '../../clients/task.client';
 import { login } from '../../clients/user.client';
 import { createIssueEvent, createMergeRequestEvent, YEARLY_CRON } from '../../factories/trigger-engine.factory';
 import { createTestUser } from '../../factories/user.factory';
@@ -139,6 +139,7 @@ describe('Task and run read routes (integration)', () => {
       '/api/v1/admin/task/1',
       '/api/v1/admin/run/1',
       '/api/v1/admin/run/1/transcript',
+      '/api/v1/admin/run/1/transcript/stream',
     ];
 
     it.each(routes)('refuses a signed-out request to %s', async route => {
@@ -201,6 +202,7 @@ describe('Task and run read routes (integration)', () => {
         issue: null,
         mergeRequest: { iid: 118 },
         runCount: 0,
+        furthestStep: null,
       });
       expect(scheduledRow).toMatchObject({ kind: 'schedule', issue: null, mergeRequest: null, totalTokens: null });
       expect(issueRow).toMatchObject({
@@ -208,6 +210,7 @@ describe('Task and run read routes (integration)', () => {
         status: TaskStatus.FAILED,
         issue: { iid: 1 },
         runCount: 2,
+        furthestStep: 1,
         totalTokens: 3250,
         costUsd: 0.5,
         configSha: sha,
@@ -215,7 +218,7 @@ describe('Task and run read routes (integration)', () => {
       expect(issueRow.startDate).not.toBeNull();
     });
 
-    it('filters by status and by project', async () => {
+    it('filters by status and by project, in any case', async () => {
       const { trigger, project } = scope();
       const other = scope();
 
@@ -226,9 +229,11 @@ describe('Task and run read routes (integration)', () => {
 
       const byStatus = await getTaskList(app, token, { trigger, status: TaskStatus.FAILED }).expect(200);
       const byProject = await getTaskList(app, token, { project }).expect(200);
+      const byProjectInCase = await getTaskList(app, token, { project: project.toUpperCase() }).expect(200);
 
       expect(byStatus.body.taskList.map((task: { id: number }) => task.id)).toEqual([failed.id]);
       expect(byProject.body.taskList.map((task: { id: number }) => task.id)).toEqual([queued.id, failed.id]);
+      expect(byProjectInCase.body.taskList.map((task: { id: number }) => task.id)).toEqual([queued.id, failed.id]);
     });
 
     it('pages at the configured page size', async () => {
@@ -337,6 +342,22 @@ describe('Task and run read routes (integration)', () => {
       expect(response.body.events.map((event: { lineNumber: number }) => event.lineNumber)).toEqual([3]);
     });
 
+    it('reads backward from the end and from a line, filtered by type', async () => {
+      const types = 'systemInit,toolCall,result';
+      const fromEnd = await getTranscript(app, token, runId, { direction: 'backward', types }).expect(200);
+      const beforeLine = await getTranscript(app, token, runId, { direction: 'backward', beforeLine: 5, types }).expect(
+        200
+      );
+
+      expect(fromEnd.body.events.map((event: { lineNumber: number }) => event.lineNumber)).toEqual([1, 2, 5]);
+      expect(fromEnd.body).toMatchObject({ firstLine: 1, hasEarlier: false, nextLine: 6, hasMore: false });
+      expect(beforeLine.body.events.map((event: { type: string }) => event.type)).toEqual([
+        TranscriptEventType.SYSTEM_INIT,
+        TranscriptEventType.TOOL_CALL,
+      ]);
+      expect(beforeLine.body).toMatchObject({ firstLine: 1, nextLine: 5, hasMore: true });
+    });
+
     it("returns a static step's run with an empty transcript", async () => {
       const { trigger, project } = scope();
       const task = await enqueueIssue(trigger, project, 1);
@@ -345,12 +366,39 @@ describe('Task and run read routes (integration)', () => {
       await getRun(app, token, relabel.id).expect(200);
       const response = await getTranscript(app, token, relabel.id).expect(200);
 
-      expect(response.body).toEqual({ events: [], nextLine: 1, hasMore: false });
+      expect(response.body).toEqual({ events: [], firstLine: 1, hasEarlier: false, nextLine: 1, hasMore: false });
     });
 
     it('refuses a type it does not know and a run that does not exist', async () => {
       await getTranscript(app, token, runId, { types: 'thinking' }).expect(400);
+      await getTranscript(app, token, runId, { direction: 'backward', fromLine: 2 }).expect(400);
       await getTranscript(app, token, 2147483647).expect(400);
+    });
+
+    it("streams a judged run's lines after the last one held, filtered, then the end, and closes", async () => {
+      const response = await streamTranscript(app, token, runId, { lastEventId: '2', types: 'toolResult,result' })
+        .expect(200)
+        .expect('Content-Type', /text\/event-stream/);
+
+      const messages = response.text
+        .split('\n\n')
+        .filter(frame => /^data: /m.test(frame) && !/^event: /m.test(frame))
+        .map(frame => ({
+          id: /^id: (.*)$/m.exec(frame)?.[1] ?? null,
+          data: JSON.parse(/^data: (.*)$/m.exec(frame)?.[1] ?? 'null'),
+        }));
+
+      expect(messages.map(message => [message.id, message.data.type, message.data.lineNumber])).toEqual([
+        ['3', 'line', 3],
+        ['5', 'line', 5],
+        ['5', 'end', undefined],
+      ]);
+      expect(messages[0].data.events).toMatchObject([{ type: TranscriptEventType.TOOL_RESULT, isError: true }]);
+    });
+
+    it('refuses a stream for a run that does not exist or from a line that is not one', async () => {
+      await streamTranscript(app, token, 2147483647).expect(400);
+      await streamTranscript(app, token, runId, { lastEventId: 'abc' }).expect(400);
     });
   });
 });

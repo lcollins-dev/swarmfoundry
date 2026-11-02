@@ -50,11 +50,6 @@
         {{ loading ? 'Signing in...' : 'Sign In' }}
       </ui-button>
     </ui-form>
-
-    <p v-if="userStore.canRegister" class="mb-0 mt-4 text-center text-muted">
-      No account yet?
-      <ui-link to="/register">Create one</ui-link>
-    </p>
   </ui-card>
 </template>
 
@@ -70,9 +65,8 @@ import { Config } from '@/Config';
 import { useLogService } from '@/services/LogService';
 import { useUserService } from '@/services/api/UserService';
 import { useErrorStore } from '@/stores/error';
-import { useUserStore } from '@/stores/user';
 
-import { UiButton, UiCard, UiForm, UiFormField, UiFormHeading, UiIdentityPill, UiInput, UiLink } from '@/components/ui';
+import { UiButton, UiCard, UiForm, UiFormField, UiFormHeading, UiIdentityPill, UiInput } from '@/components/ui';
 
 const FORM_NAME = 'sign-in';
 
@@ -80,7 +74,6 @@ const logService = useLogService();
 const logger = logService.createLogger('pages/loggedout/SignIn');
 
 const errorStore = useErrorStore();
-const userStore = useUserStore();
 const userService = useUserService();
 
 const step = ref<'email' | 'password'>('email');

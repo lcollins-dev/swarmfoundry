@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ConfigRepoGitService, GitError } from './config-repo-git.service';
 import { SecretRedactionService } from './secret-redaction.service';
 
-import type { IConfigRepo } from './foundry-config.types';
+import type { IConfigRepo } from './types/foundry-config.types';
 
 const TOKEN = 'glpat-config-repo-secret';
 const BRANCH = 'main';
@@ -196,6 +196,18 @@ describe('ConfigRepoGitService', () => {
     await expect(service.listFiles(repo, sha, signal)).resolves.toEqual(
       expect.arrayContaining(['config/swarmfoundry.yaml', 'config/prompts/implement.md', 'README.md'])
     );
+  });
+
+  it('reads a file as the commit held it, and nothing for a missing file, a folder or an unknown commit', async () => {
+    const first = commit({ 'config/swarmfoundry.yaml': 'first' });
+    const second = commit({ 'config/swarmfoundry.yaml': 'second' });
+    await service.fetch(repo, signal);
+
+    await expect(service.readFile(repo, first, 'config/swarmfoundry.yaml', signal)).resolves.toBe('first');
+    await expect(service.readFile(repo, second, 'config/swarmfoundry.yaml', signal)).resolves.toBe('second');
+    await expect(service.readFile(repo, second, 'config/missing.md', signal)).resolves.toBeNull();
+    await expect(service.readFile(repo, second, 'config', signal)).resolves.toBeNull();
+    await expect(service.readFile(repo, 'c'.repeat(40), 'config/swarmfoundry.yaml', signal)).resolves.toBeNull();
   });
 
   describe('export', () => {

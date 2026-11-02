@@ -23,11 +23,15 @@
           />
 
           <div class="ml-7 py-3">
-            <div v-if="notification.title !== null" class="mb-1 pr-5 font-semibold text-header">
+            <div
+              v-if="notification.title !== null"
+              class="pr-5 font-semibold text-header"
+              :class="{ 'mb-1': notification.content !== '' }"
+            >
               {{ notification.title }}
             </div>
 
-            <div :class="{ 'pr-5': notification.title === null }">
+            <div v-if="notification.content !== ''" :class="{ 'pr-5': notification.title === null }">
               <template v-if="typeof notification.content === 'string'">{{ notification.content }}</template>
               <component :is="notification.content" v-else />
             </div>

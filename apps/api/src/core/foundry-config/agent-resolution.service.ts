@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
 
 import { issueAt } from './foundry-config.error';
+import { agentDefinitionSchema } from './schema/agents';
 import type {
   AgentResolutionResult,
   IAgentDefinition,
   IAgentLayer,
   IMergedAgentFields,
   KeyPath,
-} from './foundry-config.types';
-import { agentDefinitionSchema } from './schema/agents';
+} from './types/foundry-config.types';
 
 @Injectable()
 export class AgentResolutionService {

@@ -3,10 +3,11 @@
     class="sticky top-14 flex h-[calc(100vh-3.5rem)] w-56 shrink-0 flex-col self-start overflow-y-auto border-r border-divider bg-surface px-2.5 py-3.5"
     :aria-label="props.label"
   >
-    <template v-for="(section, index) of props.sections" :key="section.title">
+    <template v-for="(section, index) of props.sections" :key="index">
       <div v-if="index > 0" class="h-5 min-h-3 shrink" aria-hidden="true" />
 
       <div
+        v-if="section.title !== undefined"
         class="shrink-0 px-2.5 pb-1.5 text-xs font-medium uppercase tracking-wider text-muted"
         :class="{ 'pt-1': index === 0 }"
       >
@@ -42,7 +43,7 @@ export interface INavItem {
 }
 
 export interface INavSection {
-  title: string;
+  title?: string;
   items: INavItem[];
 }
 

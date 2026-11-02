@@ -17,7 +17,7 @@ import { REDACTED, SecretRedactionService } from '@/core/foundry-config/secret-r
 import type { TaskService } from '@/core/task/task.service';
 
 import { RunConfigError } from './run-config.error';
-import type { IResolvedAgent } from '@/core/foundry-config/foundry-config.types';
+import type { IResolvedAgent } from '@/core/foundry-config/types/foundry-config.types';
 
 const AGENT_TOKEN = 'sk-ant-oat-agent-token';
 const CONFIG_SECRET = 'glpat-config-secret';
@@ -70,7 +70,7 @@ describe('AgentOutputService', () => {
 
   describe('transcript', () => {
     it('stores each stdout line in order, numbered, joining lines split across chunks', async () => {
-      const output = service.create(9, agent());
+      const output = service.create(4, 9, agent());
 
       service.writeStdout(output, Buffer.from('{"a":1}\n{"b"'));
       service.writeStdout(output, Buffer.from(':2}\r\n{"c":3}'));
@@ -84,7 +84,7 @@ describe('AgentOutputService', () => {
     });
 
     it('stores only the lines past those already stored, but reads every line for events', async () => {
-      const output = service.create(9, agent({ 'dev@acme': true }), 2);
+      const output = service.create(4, 9, agent({ 'dev@acme': true }), 2);
 
       service.writeStdout(output, line(init('dev@acme')));
       service.writeStdout(output, line({ type: 'assistant' }));
@@ -97,7 +97,7 @@ describe('AgentOutputService', () => {
     });
 
     it('keeps a multi-byte character split across chunks whole', async () => {
-      const output = service.create(9, agent());
+      const output = service.create(4, 9, agent());
       const bytes = Buffer.from('café\n');
 
       service.writeStdout(output, bytes.subarray(0, 4));
@@ -108,7 +108,7 @@ describe('AgentOutputService', () => {
     });
 
     it('redacts config secrets and the agent token, raw and JSON-escaped, before storing', async () => {
-      const output = service.create(9, agent());
+      const output = service.create(4, 9, agent());
 
       service.writeStdout(output, line({ text: `${CONFIG_SECRET} and ${AGENT_TOKEN}` }));
       await service.finish(output);
@@ -127,7 +127,7 @@ describe('AgentOutputService', () => {
         });
       });
 
-      const output = service.create(9, agent());
+      const output = service.create(4, 9, agent());
 
       service.writeStdout(output, Buffer.from('1\n'));
       service.writeStdout(output, Buffer.from('2\n3\n'));
@@ -141,7 +141,7 @@ describe('AgentOutputService', () => {
     });
 
     it(`caps a batch at ${MAX_BATCH_LINES} lines`, async () => {
-      const output = service.create(9, agent());
+      const output = service.create(4, 9, agent());
 
       service.writeStdout(output, Buffer.from('x\n'.repeat(MAX_BATCH_LINES + 1)));
       await service.finish(output);
@@ -150,7 +150,7 @@ describe('AgentOutputService', () => {
     });
 
     it('stores an over-long line in pieces', async () => {
-      const output = service.create(9, agent());
+      const output = service.create(4, 9, agent());
 
       service.writeStdout(output, Buffer.from('a'.repeat(MAX_LINE_LENGTH + SECRET_OVERLAP + 5)));
       await service.finish(output);
@@ -159,7 +159,7 @@ describe('AgentOutputService', () => {
     });
 
     it('redacts a secret that straddles the cut of an over-long line', async () => {
-      const output = service.create(9, agent());
+      const output = service.create(4, 9, agent());
       const prefix = 'a'.repeat(MAX_LINE_LENGTH - 4);
 
       service.writeStdout(output, Buffer.from(`${prefix}${AGENT_TOKEN}${'b'.repeat(SECRET_OVERLAP)}`));
@@ -175,7 +175,7 @@ describe('AgentOutputService', () => {
     });
 
     it('strips NUL characters, which Postgres text cannot hold', async () => {
-      const output = service.create(9, agent());
+      const output = service.create(4, 9, agent());
 
       service.writeStdout(output, Buffer.from('a\u0000b\n'));
       await service.finish(output);
@@ -184,7 +184,7 @@ describe('AgentOutputService', () => {
     });
 
     it('leaves a line without its newline out of a flush', async () => {
-      const output = service.create(9, agent());
+      const output = service.create(4, 9, agent());
 
       service.writeStdout(output, Buffer.from('done\npart'));
       await service.flush(output);
@@ -195,7 +195,7 @@ describe('AgentOutputService', () => {
     it('drops the rest of the transcript after a failed write, and records why', async () => {
       appendTranscriptLines.mockRejectedValueOnce(new Error(`connection lost ${CONFIG_SECRET}`));
 
-      const output = service.create(9, agent());
+      const output = service.create(4, 9, agent());
 
       service.writeStdout(output, Buffer.from('1\n'));
       await service.flush(output);
@@ -209,7 +209,7 @@ describe('AgentOutputService', () => {
 
   describe('events', () => {
     it('keeps the last result line, redacted', async () => {
-      const output = service.create(9, agent());
+      const output = service.create(4, 9, agent());
 
       service.writeStdout(output, line({ type: 'result', subtype: 'success', result: `done ${AGENT_TOKEN}` }));
       await service.finish(output);
@@ -218,7 +218,7 @@ describe('AgentOutputService', () => {
     });
 
     it('reports nothing about plugins before system/init', () => {
-      const output = service.create(9, agent({ 'development@acme': true }));
+      const output = service.create(4, 9, agent({ 'development@acme': true }));
 
       service.writeStdout(output, line({ type: 'system', subtype: 'plugin_install', status: 'started' }));
 
@@ -227,7 +227,7 @@ describe('AgentOutputService', () => {
     });
 
     it('passes when every enabled plugin loaded, ignoring disabled ones', () => {
-      const output = service.create(9, agent({ 'development@acme': true, 'off@acme': false }));
+      const output = service.create(4, 9, agent({ 'development@acme': true, 'off@acme': false }));
 
       service.writeStdout(output, line(init('development@acme', 'telemetry@builtin')));
 
@@ -236,7 +236,7 @@ describe('AgentOutputService', () => {
     });
 
     it('fails when an enabled plugin is missing from system/init', () => {
-      const output = service.create(9, agent({ 'development@acme': true, 'review@acme': true }));
+      const output = service.create(4, 9, agent({ 'development@acme': true, 'review@acme': true }));
 
       service.writeStdout(output, line(init('development@acme')));
 
@@ -244,7 +244,7 @@ describe('AgentOutputService', () => {
     });
 
     it('fails on a failed plugin install, even with every plugin loaded', () => {
-      const output = service.create(9, agent({}));
+      const output = service.create(4, 9, agent({}));
 
       service.writeStdout(
         output,
@@ -262,7 +262,7 @@ describe('AgentOutputService', () => {
           secretRedactionService.redactText(text, ['acme', 'true', ...extra]),
       } as unknown as FoundryConfigService;
       const strict = new AgentOutputService(masking, { appendTranscriptLines } as unknown as TaskService);
-      const output = strict.create(9, agent({ 'development@acme': true }));
+      const output = strict.create(4, 9, agent({ 'development@acme': true }));
 
       strict.writeStdout(output, line(init('development@acme')));
       await strict.finish(output);
@@ -272,7 +272,7 @@ describe('AgentOutputService', () => {
     });
 
     it('redacts the error of a failed install', () => {
-      const output = service.create(9, agent({}));
+      const output = service.create(4, 9, agent({}));
 
       service.writeStdout(
         output,
@@ -292,8 +292,8 @@ describe('AgentOutputService', () => {
     it('refuses settings whose enabledPlugins is not an object', () => {
       const broken = { ...agent(), settings: { path: '/config/settings.json', content: '{"enabledPlugins":[]}' } };
 
-      expect(() => service.create(9, broken)).toThrow('/config/settings.json');
-      expect(() => service.create(9, broken)).toThrow(RunConfigError);
+      expect(() => service.create(4, 9, broken)).toThrow('/config/settings.json');
+      expect(() => service.create(4, 9, broken)).toThrow(RunConfigError);
     });
   });
 
@@ -304,32 +304,63 @@ describe('AgentOutputService', () => {
 
     const bashCall = (id: string, command: string) =>
       `${JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Bash', input: { command } }] } })}\n`;
-    const toolResult = (id: string, content: unknown) =>
+    const toolResult = (id: string, content: string) =>
       `{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":${JSON.stringify(id)},"content":${JSON.stringify(content)}}]}}\n`;
-    const STOPPED =
-      'Exit code 1\nready\n\nSwarmfoundry stopped this command, and every process it started, after 180s: its limit of 120s plus 60s grace.';
+    const killed = (id: string, at = Date.now()) =>
+      `Swarmfoundry: the command limit stopped tool call ${id} at ${at}.\n`;
 
-    it('logs a Bash call the command limit stopped, with its run and redacted command', async () => {
+    it('logs a kill from stderr once, with its task, run and redacted command, and keeps it out of the tail', async () => {
       const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-      const output = service.create(9, agent());
+      const output = service.create(4, 9, agent());
 
       service.writeStdout(output, Buffer.from(bashCall('toolu_1', `glab mr view --token ${AGENT_TOKEN}`)));
-      service.writeStdout(output, Buffer.from(toolResult('toolu_1', [{ type: 'text', text: STOPPED }])));
+      service.writeStderr(output, Buffer.from(killed('toolu_1')));
       await service.finish(output);
 
+      expect(warn).toHaveBeenCalledOnce();
       expect(warn).toHaveBeenCalledWith(
-        { runId: 9, toolUseId: 'toolu_1', command: `glab mr view --token ${REDACTED}` },
+        { taskId: 4, runId: 9, toolUseId: 'toolu_1', command: `glab mr view --token ${REDACTED}` },
         expect.stringContaining('The command limit stopped an agent command')
       );
+      expect(service.stderrTail(output)).toBeNull();
       expect(output.bashCommands.size).toBe(0);
+    });
+
+    it('logs the kill of a background call, whose result came before it', async () => {
+      const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const output = service.create(4, 9, agent());
+
+      service.writeStdout(output, Buffer.from(bashCall('toolu_1', 'npm run dev')));
+      service.writeStdout(output, Buffer.from(toolResult('toolu_1', 'Command running in background with ID: b1')));
+      service.writeStderr(output, Buffer.from(killed('toolu_1')));
+      await service.finish(output);
+
+      expect(warn).toHaveBeenCalledWith(expect.objectContaining({ command: 'npm run dev' }), expect.any(String));
+    });
+
+    it('logs a kill appended to unfinished stderr from Claude, keeping that stderr redacted in the tail', async () => {
+      const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const output = service.create(4, 9, agent());
+
+      service.writeStderr(output, Buffer.from(`warning ${AGENT_TOKEN}: ${killed('toolu_2')}${killed('')}`));
+      await service.finish(output);
+
+      expect(service.stderrTail(output)).toBe(`warning ${REDACTED}: `);
+      expect(warn).toHaveBeenCalledTimes(2);
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({ toolUseId: 'toolu_2', command: null }),
+        expect.any(String)
+      );
+      expect(warn).toHaveBeenCalledWith(expect.objectContaining({ toolUseId: '', command: null }), expect.any(String));
     });
 
     it('redacts a long command before cutting it, so no token is logged in part', async () => {
       const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-      const output = service.create(9, agent());
+      const output = service.create(4, 9, agent());
       const command = `${'x'.repeat(190)} ${AGENT_TOKEN}`;
 
-      service.writeStdout(output, Buffer.from(bashCall('toolu_1', command) + toolResult('toolu_1', STOPPED)));
+      service.writeStdout(output, Buffer.from(bashCall('toolu_1', command)));
+      service.writeStderr(output, Buffer.from(killed('toolu_1')));
       await service.finish(output);
 
       expect(warn).toHaveBeenCalledWith(
@@ -338,53 +369,117 @@ describe('AgentOutputService', () => {
       );
     });
 
-    it('logs nothing for a result without the reason, or for a call that is not Bash', async () => {
+    it('logs nothing for a stopped result, or for stderr that only quotes the kill line', async () => {
       const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-      const output = service.create(9, agent());
+      const output = service.create(4, 9, agent());
+      const stopped =
+        'Exit code 1\nready\n\nSwarmfoundry stopped this command, and every process it started, after 180s: its limit of 120s plus 60s grace.';
 
-      service.writeStdout(output, Buffer.from(bashCall('toolu_1', 'make')));
-      service.writeStdout(output, Buffer.from(toolResult('toolu_1', 'Exit code 2\nmake: *** Error 1')));
-      service.writeStdout(output, Buffer.from(toolResult('toolu_2', STOPPED)));
-      service.writeStdout(output, Buffer.from(bashCall('toolu_3', 'grep -rn "Swarmfoundry stopped" apps')));
-      service.writeStdout(
-        output,
-        Buffer.from(toolResult('toolu_3', `apps/limit.ts:8:  '${STOPPED.split('\n').at(-1)}'`))
-      );
+      service.writeStdout(output, Buffer.from(bashCall('toolu_1', 'make') + toolResult('toolu_1', stopped)));
+      service.writeStderr(output, Buffer.from(`quoted '${killed('toolu_1').trim()}'\n`));
       await service.finish(output);
 
       expect(warn).not.toHaveBeenCalled();
     });
 
-    it('logs the stopped call in a stream captured from Claude Code', async () => {
+    it.each([
+      ['carries a token as its id', killed(AGENT_TOKEN).trim()],
+      ['carries a token after a kill line as its id', `note ${killed(AGENT_TOKEN).trim()}`],
+      ['carries an id not in the tool use shape', killed('toolu_1-x').trim()],
+      ['carries an id without the toolu_ prefix', killed('call_1').trim()],
+    ])('logs no kill for stderr that %s, and keeps it redacted in the tail', async (_case, line) => {
       const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-      const output = service.create(9, agent());
+      const output = service.create(4, 9, agent());
 
-      service.writeStdout(output, readFileSync(join(__dirname, 'fixtures', 'claude-code-2.1.312.stream.jsonl')));
+      service.writeStderr(output, Buffer.from(`${line}\n`));
       await service.finish(output);
 
-      expect(warn).toHaveBeenCalledOnce();
+      expect(warn).not.toHaveBeenCalled();
+      expect(service.stderrTail(output)).toBe(line.replaceAll(AGENT_TOKEN, REDACTED));
+      expect(service.stderrTail(output)).not.toContain(AGENT_TOKEN);
+    });
+
+    it.each(['toolu_bdrk_01Vz7cmp4URWqR3dnm82Sh4m', 'toolu_vrtx_01Vz7cmp4URWqR3dnm82Sh4m'])(
+      'logs the kill of a Bedrock or Vertex call %s with its command',
+      async id => {
+        const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        const output = service.create(4, 9, agent());
+
+        service.writeStdout(output, Buffer.from(bashCall(id, 'make')));
+        service.writeStderr(output, Buffer.from(killed(id)));
+        await service.finish(output);
+
+        expect(warn).toHaveBeenCalledWith({ taskId: 4, runId: 9, toolUseId: id, command: 'make' }, expect.any(String));
+        expect(service.stderrTail(output)).toBeNull();
+      }
+    );
+
+    it('keeps every blank line Claude wrote to stderr, around a kill line too', async () => {
+      vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const output = service.create(4, 9, agent());
+
+      service.writeStderr(output, Buffer.from('first\n\nsecond\n'));
+      service.writeStderr(output, Buffer.from(`\n${killed('toolu_1')}`));
+      service.writeStderr(output, Buffer.from('\nthird\n\n'));
+      await service.finish(output);
+
+      expect(output.stderrTail).toEqual(['first', '', 'second', '', '', 'third', '']);
+    });
+
+    it('redacts a secret that fits the tool use id shape before logging the id', async () => {
+      const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const secretRedactionService = new SecretRedactionService();
+      const masking = {
+        redactText: (text: string, extra: readonly string[] = []) =>
+          secretRedactionService.redactText(text, ['Base62Secret', ...extra]),
+      } as unknown as FoundryConfigService;
+      const strict = new AgentOutputService(masking, { appendTranscriptLines } as unknown as TaskService);
+      const output = strict.create(4, 9, agent());
+
+      strict.writeStderr(output, Buffer.from(killed('toolu_Base62Secret')));
+      await strict.finish(output);
+
       expect(warn).toHaveBeenCalledWith(
-        { runId: 9, toolUseId: 'toolu_01Vz7cmp4URWqR3dnm82Sh4m', command: 'echo waiting; sleep 30' },
+        expect.objectContaining({ toolUseId: `toolu_${REDACTED}` }),
         expect.any(String)
       );
     });
 
-    it('logs no stop again when a reattach replays lines already stored, but logs one after them', async () => {
+    it('names the call in a stream captured from Claude Code', async () => {
       const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-      const output = service.create(9, agent(), 2);
+      const output = service.create(4, 9, agent());
 
-      service.writeStdout(output, Buffer.from(bashCall('toolu_1', 'make') + toolResult('toolu_1', STOPPED)));
-      service.writeStdout(output, Buffer.from(bashCall('toolu_2', 'npm test') + toolResult('toolu_2', STOPPED)));
+      service.writeStdout(output, readFileSync(join(__dirname, 'fixtures', 'claude-code-2.1.312.stream.jsonl')));
+      service.writeStderr(output, Buffer.from(killed('toolu_01Vz7cmp4URWqR3dnm82Sh4m')));
       await service.finish(output);
 
       expect(warn).toHaveBeenCalledOnce();
-      expect(warn).toHaveBeenCalledWith({ runId: 9, toolUseId: 'toolu_2', command: 'npm test' }, expect.any(String));
+      expect(warn).toHaveBeenCalledWith(
+        { taskId: 4, runId: 9, toolUseId: 'toolu_01Vz7cmp4URWqR3dnm82Sh4m', command: 'echo waiting; sleep 30' },
+        expect.any(String)
+      );
+    });
+
+    it('logs no kill a reattach replays from before it began reading, but logs one after, with no line since', async () => {
+      const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const output = service.create(4, 9, agent(), 2);
+
+      service.writeStdout(output, Buffer.from(bashCall('toolu_1', 'make') + bashCall('toolu_2', 'npm test')));
+      service.writeStderr(output, Buffer.from(killed('toolu_1', output.readSince - 1)));
+      service.writeStderr(output, Buffer.from(killed('toolu_2', output.readSince)));
+      await service.finish(output);
+
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith(
+        { taskId: 4, runId: 9, toolUseId: 'toolu_2', command: 'npm test' },
+        expect.any(String)
+      );
     });
   });
 
   describe('stderr', () => {
     it('keeps a redacted tail, not stored as transcript', async () => {
-      const output = service.create(9, agent());
+      const output = service.create(4, 9, agent());
 
       service.writeStderr(output, Buffer.from(`fatal: ${AGENT_TOKEN}\nlast`));
       await service.finish(output);
@@ -394,7 +489,7 @@ describe('AgentOutputService', () => {
     });
 
     it(`keeps only the last ${STDERR_TAIL_LINES} lines`, () => {
-      const output = service.create(9, agent());
+      const output = service.create(4, 9, agent());
 
       service.writeStderr(
         output,
@@ -406,7 +501,7 @@ describe('AgentOutputService', () => {
     });
 
     it('is null when the container wrote none', () => {
-      expect(service.stderrTail(service.create(9, agent()))).toBeNull();
+      expect(service.stderrTail(service.create(4, 9, agent()))).toBeNull();
     });
   });
 });

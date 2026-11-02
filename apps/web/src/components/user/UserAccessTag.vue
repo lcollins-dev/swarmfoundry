@@ -16,6 +16,6 @@ const props = defineProps({
   },
 });
 
-// Any role makes an admin: every role the template defines grants an admin area.
+// Every role grants admin access, so any role makes an admin.
 const isAdmin = computed(() => props.user.userRoleIds.length > 0);
 </script>

@@ -8,8 +8,15 @@ import { UserRole } from '@/core/user/entities/user-role.entity';
 import { UserUserRole } from '@/core/user/entities/user-user-role.entity';
 import { User } from '@/core/user/entities/user.entity';
 
-import { UserAdminService } from '@/api/v1/user/user-admin.service';
+import {
+  DISABLED_PASSWORD_LINK_MESSAGE,
+  OWN_PASSWORD_LINK_MESSAGE,
+  OWN_ROLES_MESSAGE,
+  OWN_STATE_MESSAGE,
+  UserAdminService,
+} from '@/api/v1/user/user-admin.service';
 import { ConfigService } from '@/config/config.service';
+import { PasswordLinkService } from '@/core/user/password-link.service';
 import { UserService } from '@/core/user/user.service';
 
 const PAGE_SIZE = 10;
@@ -38,7 +45,13 @@ describe('UserAdminService', () => {
     countByState: ReturnType<typeof vi.fn>;
     findWithThrow: ReturnType<typeof vi.fn>;
     setEnabled: ReturnType<typeof vi.fn>;
+    invite: ReturnType<typeof vi.fn>;
+    updateProfile: ReturnType<typeof vi.fn>;
+    updateRoles: ReturnType<typeof vi.fn>;
   };
+  let issueMock: ReturnType<typeof vi.fn>;
+
+  const issuedLink = { link: 'https://app.test/set-password#token', expiresAt: new Date(), emailed: true };
 
   beforeEach(async () => {
     userService = {
@@ -47,13 +60,18 @@ describe('UserAdminService', () => {
       countByState: vi.fn().mockResolvedValue({ total: 0, enabled: 0 }),
       findWithThrow: vi.fn().mockResolvedValue(buildUser()),
       setEnabled: vi.fn().mockResolvedValue(undefined),
+      invite: vi.fn(),
+      updateProfile: vi.fn().mockResolvedValue(undefined),
+      updateRoles: vi.fn().mockResolvedValue(undefined),
     };
+    issueMock = vi.fn().mockResolvedValue(issuedLink);
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         UserAdminService,
         { provide: ConfigService, useValue: { pageSize: PAGE_SIZE } },
         { provide: UserService, useValue: userService },
+        { provide: PasswordLinkService, useValue: { issue: issueMock } },
       ],
     }).compile();
 
@@ -111,6 +129,7 @@ describe('UserAdminService', () => {
           name: 'Tester',
           email: 'tester@example.com',
           enabled: true,
+          invited: false,
           userRoleIds: [UserRoleId.USER_ADMIN],
           lastAccess: new Date('2026-05-15T12:00:00Z'),
           createdDate: new Date('2026-05-01T09:00:00Z'),
@@ -164,6 +183,16 @@ describe('UserAdminService', () => {
       await expect(userAdminService.getUser(1)).rejects.toThrow(BadRequestException);
     });
 
+    it('marks a user without a password as invited', async () => {
+      userService.findWithThrow.mockResolvedValue(buildUser({ passwordHash: null }));
+
+      await expect(userAdminService.getUser(1)).resolves.toMatchObject({ invited: true });
+    });
+
+    it('marks a user with a password as not invited', async () => {
+      await expect(userAdminService.getUser(1)).resolves.toMatchObject({ invited: false });
+    });
+
     it('carries the login, access and creation dates', async () => {
       const lastLoginSuccess = new Date('2026-05-14T08:30:00Z');
       userService.findWithThrow.mockResolvedValue(buildUser({ lastLoginSuccess }));
@@ -183,11 +212,99 @@ describe('UserAdminService', () => {
     });
   });
 
+  describe('inviteUser', () => {
+    it('invites the user and answers with their id and link', async () => {
+      const invited = buildUser({ id: 42, passwordHash: null });
+      userService.invite.mockResolvedValue(invited);
+
+      const response = await userAdminService.inviteUser({
+        name: 'Tester',
+        email: 'tester@example.com',
+        userRoleIds: [UserRoleId.SYSTEM_ADMIN],
+      });
+
+      expect(userService.invite).toHaveBeenCalledWith('Tester', 'tester@example.com', [UserRoleId.SYSTEM_ADMIN]);
+      expect(issueMock).toHaveBeenCalledWith(invited);
+      expect(response).toEqual({ userId: 42, passwordLink: issuedLink });
+    });
+  });
+
+  describe('updateUser', () => {
+    const caller = buildUser({
+      id: 5,
+      userUserRoles: [new UserUserRole(5, UserRoleId.USER_ADMIN)],
+    });
+
+    it('updates the profile and then the roles of another user', async () => {
+      await userAdminService.updateUser(
+        caller,
+        { name: 'Renamed', email: 'tester@example.com', userRoleIds: [UserRoleId.SYSTEM_ADMIN] },
+        1
+      );
+
+      expect(userService.updateProfile).toHaveBeenCalledWith('Renamed', 'tester@example.com', undefined, 1);
+      expect(userService.updateRoles).toHaveBeenCalledWith([UserRoleId.SYSTEM_ADMIN], 1);
+    });
+
+    it("refuses a change to the caller's own roles", async () => {
+      await expect(
+        userAdminService.updateUser(caller, { name: 'Admin', email: 'admin@example.com', userRoleIds: [] }, 5)
+      ).rejects.toThrow(OWN_ROLES_MESSAGE);
+
+      expect(userService.updateProfile).not.toHaveBeenCalled();
+    });
+
+    it('lets the caller save their own profile with their roles unchanged', async () => {
+      await userAdminService.updateUser(
+        caller,
+        { name: 'Admin', email: 'admin@example.com', userRoleIds: [UserRoleId.USER_ADMIN] },
+        5
+      );
+
+      expect(userService.updateRoles).toHaveBeenCalledWith([UserRoleId.USER_ADMIN], 5);
+    });
+  });
+
   describe('updateState', () => {
+    const caller = buildUser({ id: 5 });
+
     it('changes state through the domain', async () => {
-      await userAdminService.updateState(false, 1);
+      await userAdminService.updateState(caller, false, 1);
 
       expect(userService.setEnabled).toHaveBeenCalledWith(1, false);
+    });
+
+    it('refuses to disable the caller', async () => {
+      await expect(userAdminService.updateState(caller, false, 5)).rejects.toThrow(OWN_STATE_MESSAGE);
+
+      expect(userService.setEnabled).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createPasswordLink', () => {
+    const caller = buildUser({ id: 5 });
+
+    it('issues a link for another user', async () => {
+      const target = buildUser();
+      userService.findWithThrow.mockResolvedValue(target);
+
+      await expect(userAdminService.createPasswordLink(caller, 1)).resolves.toBe(issuedLink);
+
+      expect(issueMock).toHaveBeenCalledWith(target);
+    });
+
+    it('refuses a link for the caller', async () => {
+      await expect(userAdminService.createPasswordLink(caller, 5)).rejects.toThrow(OWN_PASSWORD_LINK_MESSAGE);
+
+      expect(issueMock).not.toHaveBeenCalled();
+    });
+
+    it('refuses a link for a disabled user', async () => {
+      userService.findWithThrow.mockResolvedValue(buildUser({ enabled: false }));
+
+      await expect(userAdminService.createPasswordLink(caller, 1)).rejects.toThrow(DISABLED_PASSWORD_LINK_MESSAGE);
+
+      expect(issueMock).not.toHaveBeenCalled();
     });
   });
 });

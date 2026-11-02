@@ -4,7 +4,7 @@
     class="m-auto w-full rounded-xl border border-divider bg-surface p-0 text-normal outline-hidden backdrop:animate-fade-in backdrop:bg-overlay"
     :aria-labelledby="titleId"
     autofocus
-    @cancel.prevent="close"
+    @cancel.prevent="onCancel"
     @close="onClose"
     @mousedown="onMousedown"
     @click="onClick"
@@ -19,7 +19,7 @@
           {{ props.title }}
         </h2>
 
-        <ui-icon-button :icon="IconClose" label="Close" size="sm" @click="close" />
+        <ui-icon-button v-if="props.dismissible" :icon="IconClose" label="Close" size="sm" @click="close" />
       </div>
 
       <div class="px-6 pb-5">
@@ -43,6 +43,11 @@ const props = defineProps({
   title: {
     type: String,
     required: true,
+  },
+  /** False keeps it open on Escape and a backdrop click, and hides the close button, so only its own buttons close it. */
+  dismissible: {
+    type: Boolean,
+    default: true,
   },
 });
 
@@ -80,6 +85,12 @@ const close = () => {
   show.value = false;
 };
 
+const onCancel = () => {
+  if (props.dismissible) {
+    close();
+  }
+};
+
 // The browser can close a dialog itself, such as through a `<form method="dialog">`, without a cancel event.
 const onClose = () => {
   forget();
@@ -95,7 +106,7 @@ const onMousedown = (event: MouseEvent) => {
 };
 
 const onClick = (event: MouseEvent) => {
-  if (pressedBackdrop && event.target === dialog.value) {
+  if (props.dismissible && pressedBackdrop && event.target === dialog.value) {
     close();
   }
 };

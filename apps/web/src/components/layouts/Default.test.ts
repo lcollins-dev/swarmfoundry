@@ -54,60 +54,86 @@ afterEach(() => {
 });
 
 describe('Default layout', () => {
-  it('gives a signed-in user the account sections and their menu', async () => {
-    signIn([]);
+  it('gives a system and user admin every section in sidebar order', async () => {
+    signIn([UserRoleId.SYSTEM_ADMIN, UserRoleId.USER_ADMIN]);
 
-    const { wrapper } = await mountAt('/dashboard');
+    const { wrapper } = await mountAt('/overview');
 
-    expect(navLinks(wrapper)).toEqual(['Dashboard', 'Profile & security']);
+    expect(navLinks(wrapper)).toEqual([
+      'Overview',
+      'Triggers',
+      'Queue',
+      'Tasks',
+      'API keys',
+      'Users',
+      'Config',
+      'Batch jobs',
+    ]);
     expect(wrapper.get('[data-testid="user-menu"]').text()).toContain('Ann Lee');
   });
 
-  it('offers an admin the way into the admin area from their menu', async () => {
+  it('shows a user admin only the access section', async () => {
     signIn([UserRoleId.USER_ADMIN]);
 
-    const { wrapper } = await mountAt('/dashboard');
+    const { wrapper } = await mountAt('/users');
 
-    expect(await openUserMenu(wrapper)).toEqual(['Profile & security', 'Admin', 'Sign out']);
+    expect(navLinks(wrapper)).toEqual(['Users']);
   });
 
-  it('leaves the admin entry out of the menu for a user without an admin role', async () => {
+  it('shows a system admin their API keys but not the users', async () => {
+    signIn([UserRoleId.SYSTEM_ADMIN]);
+
+    const { wrapper } = await mountAt('/overview');
+
+    expect(navLinks(wrapper)).toContain('API keys');
+    expect(navLinks(wrapper)).not.toContain('Users');
+  });
+
+  it('leaves out the sidebar for a user without a role', async () => {
     signIn([]);
 
-    const { wrapper } = await mountAt('/dashboard');
+    const { wrapper } = await mountAt('/edit-profile');
+
+    expect(wrapper.find('nav').exists()).toBe(false);
+  });
+
+  it('offers profile and sign out from the user menu', async () => {
+    signIn([UserRoleId.SYSTEM_ADMIN]);
+
+    const { wrapper } = await mountAt('/overview');
 
     expect(await openUserMenu(wrapper)).toEqual(['Profile & security', 'Sign out']);
   });
 
-  it('takes an admin to the admin dashboard from their menu', async () => {
+  it('takes the user to their profile from the menu', async () => {
     signIn([UserRoleId.SYSTEM_ADMIN]);
 
-    const { wrapper, router } = await mountAt('/dashboard');
+    const { wrapper, router } = await mountAt('/overview');
 
     await openUserMenu(wrapper);
-    await wrapper.get('[data-testid="menu-item-admin"]').trigger('click');
+    await wrapper.get('[data-testid="menu-item-profile"]').trigger('click');
     await flushPromises();
 
-    expect(router.currentRoute.value.path).toBe('/admin/dashboard');
+    expect(router.currentRoute.value.path).toBe('/edit-profile');
   });
 
   it('hides the sidebar behind the menu button on a narrow screen', async () => {
     window.innerWidth = 800;
-    signIn([]);
+    signIn([UserRoleId.USER_ADMIN]);
 
-    const { wrapper } = await mountAt('/dashboard');
+    const { wrapper } = await mountAt('/users');
 
     expect(wrapper.find('nav').exists()).toBe(false);
 
     await wrapper.get('button[aria-label="Menu"]').trigger('click');
 
-    expect(navLinks(wrapper)).toEqual(['Dashboard', 'Profile & security']);
+    expect(navLinks(wrapper)).toEqual(['Users']);
   });
 
   it('flips the theme from the header', async () => {
     signIn([]);
 
-    const { wrapper } = await mountAt('/dashboard');
+    const { wrapper } = await mountAt('/edit-profile');
 
     await wrapper.get('button[aria-label="Toggle theme"]').trigger('click');
 

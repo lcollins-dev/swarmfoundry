@@ -110,7 +110,7 @@ export const useApiService = () => {
         }
 
         if (userMessage !== undefined) {
-          throw new ApiError(ApiErrorBase.UNKNOWN, userMessage);
+          throw new ApiError(ApiErrorBase.BAD_REQUEST, userMessage);
         }
 
         if (isValidationResponse(response.data)) {

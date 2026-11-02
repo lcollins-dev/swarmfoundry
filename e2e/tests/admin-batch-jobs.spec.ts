@@ -17,7 +17,7 @@ test.describe('admin batch jobs', () => {
 
     await adminBatchJobsPage.rowByName(EXAMPLE_BATCH_JOB_NAME).click();
 
-    await expect(page).toHaveURL(new RegExp(`/admin/batch-jobs/${EXAMPLE_BATCH_JOB_ID}$`));
+    await expect(page).toHaveURL(new RegExp(`/batch-jobs/${EXAMPLE_BATCH_JOB_ID}$`));
     await expect(adminBatchJobPage.state).toBeVisible();
   });
 

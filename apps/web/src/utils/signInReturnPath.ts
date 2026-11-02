@@ -4,9 +4,7 @@ export const RETURN_PATH_PARAM = 'redirect';
 
 export const SIGN_IN_PATH = '/sign-in';
 
-const REGISTER_PATH = '/register';
-
-/** Undefined unless the value is a path on this origin, other than sign in or register. */
+/** Undefined unless the value is a path on this origin, other than sign in. */
 export function signInReturnPath(query: LocationQuery): string | undefined {
   const value = query[RETURN_PATH_PARAM];
 
@@ -25,7 +23,7 @@ export function signInReturnPath(query: LocationQuery): string | undefined {
   // The router matches paths regardless of case and a trailing slash.
   const routePath = url.pathname.replace(/\/+$/, '').toLowerCase();
 
-  if (routePath === SIGN_IN_PATH || routePath === REGISTER_PATH) {
+  if (routePath === SIGN_IN_PATH) {
     return undefined;
   }
 

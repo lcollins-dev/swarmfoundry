@@ -3,8 +3,8 @@ import { expect, test } from '../fixtures/test';
 import { LOGGED_OUT_STORAGE_STATE } from '../utils/paths';
 
 test.describe('notifications', () => {
-  test('lists the notifications of the signed-in user', async ({ dashboardPage, notificationsPanel }) => {
-    await dashboardPage.goto();
+  test('lists the notifications of the signed-in user', async ({ overviewPage, notificationsPanel }) => {
+    await overviewPage.goto();
     await notificationsPanel.open();
 
     await expect(notificationsPanel.panel).toBeVisible();

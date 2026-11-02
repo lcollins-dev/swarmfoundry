@@ -1,7 +1,7 @@
 <template>
   <component
     :is="props.tag"
-    class="overflow-hidden rounded-xl border bg-surface"
+    class="flex flex-col overflow-hidden rounded-xl border bg-surface"
     :class="props.danger ? 'border-error-line' : 'border-divider'"
   >
     <div v-if="props.title" class="flex items-center justify-between gap-3 border-b border-divider px-6 py-4">
@@ -15,7 +15,7 @@
       <slot name="header-extra" />
     </div>
 
-    <div :class="{ 'px-6 py-5': !props.flush }">
+    <div class="flex-1" :class="{ 'px-6 py-5': !props.flush }">
       <slot />
     </div>
 

@@ -6,15 +6,15 @@ import { In, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 import { v4 as uuidv4 } from 'uuid';
 
-import { UserRoleId } from '@libs/dto';
+import { PASSWORD_LINK_INVALID_MESSAGE, UserRoleId } from '@libs/dto';
 
 import { UserRole } from './entities/user-role.entity';
 import { UserUserRole } from './entities/user-user-role.entity';
 import { User } from './entities/user.entity';
 
+import { PasswordLinkService } from './password-link.service';
 import { TokenService } from './token.service';
 import { ConfigService } from '@/config/config.service';
-import { EmailService, EmailTemplate } from '@/email/email.service';
 
 const INVALID_LOGIN_MESSAGE = "That email and password don't match. Check them and try again.";
 const USER_MISSING_MESSAGE = "This user doesn't exist.";
@@ -37,7 +37,7 @@ export interface IUserCounts {
 export class UserService {
   constructor(
     private readonly configService: ConfigService,
-    private readonly emailService: EmailService,
+    private readonly passwordLinkService: PasswordLinkService,
     private readonly tokenService: TokenService,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
@@ -47,14 +47,9 @@ export class UserService {
     private readonly userUserRoleRepository: Repository<UserUserRole>
   ) {}
 
-  async createUser(
-    name: string,
-    email: string,
-    password: string,
-    userRoleIds: UserRoleId[],
-    sendWelcomeEmail = false
-  ): Promise<User> {
-    // Clean up email
+  /** Creates the user without a password, so they can sign in only once they choose one through a link. */
+  @Transactional()
+  async invite(name: string, email: string, userRoleIds: UserRoleId[]): Promise<User> {
     email = email.trim().toLowerCase();
 
     const emailUser = await this.userRepository.findOne({ where: { email } });
@@ -63,21 +58,63 @@ export class UserService {
       throw new BadRequestException(EMAIL_TAKEN_MESSAGE);
     }
 
-    const passwordHash = await bcrypt.hash(password, this.configService.userPasswordHashRounds);
-
-    const user = new User({ name, email, passwordHash });
+    const user = new User({ name, email, passwordHash: null });
     await this.userRepository.insert(user);
 
     await this.updateRoles(userRoleIds, user.id);
 
-    if (sendWelcomeEmail) {
-      await this.emailService.sendEmail(email, EmailTemplate.WELCOME, {
-        name,
-        signInUrl: `${this.configService.webAppBaseUrl}/sign-in`,
-      });
+    return user;
+  }
+
+  /** Disabling also ends the user's sessions and revokes a pending link, so enabling them again revives neither. */
+  @Transactional()
+  async setEnabled(userId: number, enabled: boolean): Promise<void> {
+    const user = await this.findWithThrow(userId);
+
+    if (enabled) {
+      await this.userRepository.update({ id: user.id }, { enabled });
+      return;
     }
 
-    return user;
+    await this.userRepository.update({ id: user.id }, { enabled, sessionUuid: null });
+    await this.passwordLinkService.revoke(user.id);
+  }
+
+  /**
+   * Sets the password through a one-time link, ends every other session and signs the user in.
+   * @returns Token for the new session
+   */
+  @Transactional()
+  async setPasswordWithLink(token: string, password: string): Promise<string> {
+    const { passwordLink } = await this.passwordLinkService.check(token);
+
+    if (passwordLink?.user === undefined) {
+      throw new BadRequestException(PASSWORD_LINK_INVALID_MESSAGE);
+    }
+
+    const user = passwordLink.user;
+
+    if (!user.enabled) {
+      throw new BadRequestException(ACCOUNT_DISABLED_MESSAGE);
+    }
+
+    if (!(await this.passwordLinkService.consume(passwordLink))) {
+      throw new BadRequestException(PASSWORD_LINK_INVALID_MESSAGE);
+    }
+
+    const sessionUuid = uuidv4();
+
+    await this.userRepository.update(
+      { id: user.id },
+      {
+        passwordHash: await bcrypt.hash(password, this.configService.userPasswordHashRounds),
+        mustChangePassword: false,
+        sessionUuid,
+        lastLoginSuccess: new Date(),
+      }
+    );
+
+    return this.tokenService.createToken(sessionUuid);
   }
 
   findRoles(): Promise<UserRole[]> {
@@ -123,12 +160,6 @@ export class UserService {
     return user;
   }
 
-  async setEnabled(userId: number, enabled: boolean): Promise<void> {
-    const user = await this.findWithThrow(userId);
-
-    await this.userRepository.update({ id: user.id }, { enabled });
-  }
-
   /**
    * Check users credentials throwing if they are invalid
    * @param email
@@ -146,7 +177,7 @@ export class UserService {
       throw new BadRequestException(INVALID_LOGIN_MESSAGE);
     }
 
-    if (!(await bcrypt.compare(password, user.passwordHash))) {
+    if (user.passwordHash === null || !(await bcrypt.compare(password, user.passwordHash))) {
       await this.userRepository.update({ id: user.id }, { lastLoginFail: new Date() });
       throw new BadRequestException(INVALID_LOGIN_MESSAGE);
     }
@@ -247,8 +278,12 @@ export class UserService {
     };
 
     if (password !== undefined) {
-      if (user.mustChangePassword && (await bcrypt.compare(password, user.passwordHash))) {
-        throw new BadRequestException('Choose a new password, not the one you signed in with.');
+      if (
+        user.mustChangePassword &&
+        user.passwordHash !== null &&
+        (await bcrypt.compare(password, user.passwordHash))
+      ) {
+        throw new BadRequestException('Choose a password different from your current one.');
       }
 
       changes.passwordHash = await bcrypt.hash(password, this.configService.userPasswordHashRounds);

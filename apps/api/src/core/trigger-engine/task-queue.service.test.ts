@@ -5,6 +5,7 @@ import { Run } from '@/core/task/entities/run.entity';
 import { Task } from '@/core/task/entities/task.entity';
 
 import type { FailureReportService } from './failure-report.service';
+import { QueueSlotsService } from './queue-slots.service';
 import type { RunJudgeService } from './run-judge.service';
 import type { TaskCheckService } from './task-check.service';
 import { CHECK_RETRY_MS, DISPATCH_RETRY_MS, STEP_TRY_DELAYS_MS, TaskQueueService } from './task-queue.service';
@@ -16,17 +17,17 @@ import type { FoundryConfigService } from '@/core/foundry-config/foundry-config.
 import type { TaskService } from '@/core/task/task.service';
 import type { IListSteps } from '@/core/task/task.service';
 
-import type { TaskCheck } from './trigger-engine.types';
+import type { TaskCheck } from './types/trigger-engine.types';
 import type {
   IActionAgent,
   IActionHandler,
   IAgentRunner,
   IAgentRunRequest,
   IStepRequest,
-} from '@/core/actions/actions.types';
-import type { IStaticStepConfig, IStepConfig, ITriggerConfig } from '@/core/foundry-config/foundry-config.types';
-import { DeploymentFault, RunEndReason, RunOutcome, StepList, TaskStatus } from '@/core/task/task.types';
-import type { IRunAgent, IRunJudgement, IRunReport, TaskNext } from '@/core/task/task.types';
+} from '@/core/actions/types/actions.types';
+import type { IStaticStepConfig, IStepConfig, ITriggerConfig } from '@/core/foundry-config/types/foundry-config.types';
+import { DeploymentFault, RunEndReason, RunOutcome, StepList, TaskStatus } from '@/core/task/types/task.types';
+import type { IRunAgent, IRunJudgement, IRunReport, TaskNext } from '@/core/task/types/task.types';
 
 const SECRET = 'glpat-secret';
 const CLEAN_RESULT = '{"type":"result","subtype":"success","is_error":false,"result":"Done"}';
@@ -335,20 +336,24 @@ describe('TaskQueueService', () => {
   let staticHandler: FakeStaticHandler;
   let service: TaskQueueService;
 
-  const createService = (agentRunner?: IAgentRunner) =>
-    new TaskQueueService(
+  const createService = (agentRunner?: IAgentRunner) => {
+    const stepExecutor = new StepExecutorService(
+      new ActionRegistryService(
+        new AgentActionService(foundryConfigService, taskService as unknown as TaskService, agentRunner),
+        staticHandler as unknown as IssueActionService
+      )
+    );
+
+    return new TaskQueueService(
       foundryConfigService,
       taskService as unknown as TaskService,
       { check } as unknown as TaskCheckService,
       { judgeExpect } as unknown as RunJudgeService,
       { logFailure, context: failureContext } as unknown as FailureReportService,
-      new StepExecutorService(
-        new ActionRegistryService(
-          new AgentActionService(foundryConfigService, taskService as unknown as TaskService, agentRunner),
-          staticHandler as unknown as IssueActionService
-        )
-      )
+      stepExecutor,
+      new QueueSlotsService(taskService as unknown as TaskService, stepExecutor)
     );
+  };
 
   beforeEach(() => {
     taskService = new FakeTaskService();
@@ -835,7 +840,11 @@ describe('TaskQueueService', () => {
     });
 
     it('resumes a failure step at its own list and step, with the failure', async () => {
-      const report: IStepConfig = { kind: 'comment', body: '{{failure.report}}' };
+      const report: IStepConfig = {
+        kind: 'comment',
+        body: '{{failure.report}}',
+        written: { body: '{{failure.report}}' },
+      };
       triggers = [stepsTrigger('implement', [CLAUDE], 1, [report])];
       const { task, run } = runningTask(1);
       Object.assign(task, { list: StepList.FAILURE_STEPS });
@@ -1426,7 +1435,12 @@ describe('TaskQueueService', () => {
     });
 
     it('retries a static step that failed on a transient deployment fault at that step, running no earlier step again', async () => {
-      const relabel: IStepConfig = { kind: 'relabel', add: ['workflow::test'], remove: [] };
+      const relabel: IStepConfig = {
+        kind: 'relabel',
+        add: ['workflow::test'],
+        remove: [],
+        written: { add: ['workflow::test'], remove: [] },
+      };
       triggers = [
         { ...stepsTrigger('implement', [CLAUDE]), steps: [{ kind: 'agent', agent: CLAUDE }, relabel] },
       ] as ITriggerConfig[];
@@ -1457,7 +1471,12 @@ describe('TaskQueueService', () => {
     });
 
     it('holds no agent slot for a static step', async () => {
-      const relabel: IStepConfig = { kind: 'relabel', add: ['workflow::test'], remove: [] };
+      const relabel: IStepConfig = {
+        kind: 'relabel',
+        add: ['workflow::test'],
+        remove: [],
+        written: { add: ['workflow::test'], remove: [] },
+      };
       const capped = { name: 'claude', concurrency: 1 };
       triggers = [
         { ...stepsTrigger('merged', [capped], 2), steps: [relabel] },
@@ -1473,7 +1492,12 @@ describe('TaskQueueService', () => {
     });
 
     it("records an agent step's agent on its run, and none on a static step's", async () => {
-      const relabel: IStepConfig = { kind: 'relabel', add: ['workflow::test'], remove: [] };
+      const relabel: IStepConfig = {
+        kind: 'relabel',
+        add: ['workflow::test'],
+        remove: [],
+        written: { add: ['workflow::test'], remove: [] },
+      };
       const claude: IActionAgent = { name: 'claude', model: 'claude-opus-5-5', auth: 'apiKey' };
       triggers = [
         { ...stepsTrigger('implement', [claude]), steps: [{ kind: 'agent', agent: claude }, relabel] },
@@ -1492,8 +1516,17 @@ describe('TaskQueueService', () => {
   });
 
   describe('failureSteps', () => {
-    const LABEL_FAILED: IStepConfig = { kind: 'relabel', add: ['foundry::failed'], remove: [] };
-    const REPORT: IStepConfig = { kind: 'comment', body: '{{failure.report}}' };
+    const LABEL_FAILED: IStepConfig = {
+      kind: 'relabel',
+      add: ['foundry::failed'],
+      remove: [],
+      written: { add: ['foundry::failed'], remove: [] },
+    };
+    const REPORT: IStepConfig = {
+      kind: 'comment',
+      body: '{{failure.report}}',
+      written: { body: '{{failure.report}}' },
+    };
 
     beforeEach(() => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });

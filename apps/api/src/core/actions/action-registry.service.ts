@@ -3,8 +3,8 @@ import { Injectable } from '@nestjs/common';
 import { AgentActionService } from './agent-action.service';
 import { IssueActionService } from './issue-action.service';
 
-import type { IActionHandler } from './actions.types';
-import type { IStepConfig, StepKind } from '@/core/foundry-config/foundry-config.types';
+import type { IActionHandler } from './types/actions.types';
+import type { IStepConfig, StepKind } from '@/core/foundry-config/types/foundry-config.types';
 
 @Injectable()
 export class ActionRegistryService {

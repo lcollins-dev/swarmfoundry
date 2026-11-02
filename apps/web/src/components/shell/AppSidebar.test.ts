@@ -5,12 +5,12 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import AppSidebar, { INavSection } from './AppSidebar.vue';
 
 const SECTIONS: INavSection[] = [
-  { title: 'General', items: [{ label: 'Dashboard', to: '/dashboard' }] },
+  { items: [{ label: 'Overview', to: '/overview' }] },
   {
     title: 'People',
     items: [
-      { label: 'Users', to: '/admin/users' },
-      { label: 'User roles', to: '/admin/users-roles' },
+      { label: 'Users', to: '/users' },
+      { label: 'User roles', to: '/users-roles' },
     ],
   },
 ];
@@ -27,15 +27,15 @@ const mountAt = async (path: string) => {
 
 describe('AppSidebar', () => {
   it('lists each section under its heading in a labelled navigation', async () => {
-    const wrapper = await mountAt('/dashboard');
+    const wrapper = await mountAt('/overview');
 
     expect(wrapper.get('nav').attributes('aria-label')).toBe('Main');
-    expect(wrapper.text()).toContain('General');
-    expect(wrapper.findAll('a').map(link => link.text())).toEqual(['Dashboard', 'Users', 'User roles']);
+    expect(wrapper.text()).toContain('People');
+    expect(wrapper.findAll('a').map(link => link.text())).toEqual(['Overview', 'Users', 'User roles']);
   });
 
   it('marks the item for the current page and the pages beneath it', async () => {
-    const wrapper = await mountAt('/admin/users/12');
+    const wrapper = await mountAt('/users/12');
 
     expect(wrapper.findAll('[aria-current="page"]').map(link => link.text())).toEqual(['Users']);
   });

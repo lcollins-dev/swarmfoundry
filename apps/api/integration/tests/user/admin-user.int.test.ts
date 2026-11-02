@@ -5,99 +5,132 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { UserRoleId } from '@libs/dto';
 
 import {
-  createUser,
+  createPasswordLink,
   getProfile,
   getUser,
+  inviteUser,
   login,
   loginRequest,
   logoutAllSessions,
   updateUser,
   updateUserState,
 } from '../../clients/user.client';
-import { createTestUser, TEST_PASSWORD } from '../../factories/user.factory';
+import { createTestUser, ITestUser, TEST_PASSWORD } from '../../factories/user.factory';
 import { bootstrapApp } from '../../setup';
 import { dbQuery } from '../../utils/db';
 
-const NEW_PASSWORD = 'An0ther$Pass';
-
-const buildCreateBody = (overrides: Record<string, unknown> = {}) => ({
-  name: 'Created User',
+const buildInviteBody = (overrides: Record<string, unknown> = {}) => ({
+  name: 'Invited User',
   email: `int-admin-${randomUUID()}@swarmfoundry.test`,
-  password: TEST_PASSWORD,
   userRoleIds: [],
   ...overrides,
 });
 
 describe('Admin user management (integration)', () => {
   let app: NestExpressApplication;
+  let admin: ITestUser;
   let token: string;
 
   beforeAll(async () => {
     app = await bootstrapApp();
 
-    const admin = await createTestUser(app, { roleIds: [UserRoleId.USER_ADMIN] });
+    admin = await createTestUser(app, { roleIds: [UserRoleId.USER_ADMIN] });
     token = await login(app, admin.email);
   });
 
-  describe('creating', () => {
-    it('creates a user who can then sign in', async () => {
-      const body = buildCreateBody();
+  describe('inviting', () => {
+    it('answers the new user id and a link to choose a password', async () => {
+      const response = await inviteUser(app, token, buildInviteBody()).expect(201);
 
-      const response = await createUser(app, token, body).expect(201);
+      expect(response.body.userId).toBeGreaterThan(0);
+      expect(response.body.passwordLink.link).toMatch(/\/set-password#[0-9a-f]{64}$/);
+      expect(typeof response.body.passwordLink.expiresAt).toBe('string');
+      expect(typeof response.body.passwordLink.emailed).toBe('boolean');
+    });
 
-      expect(Number(response.text)).toBeGreaterThan(0);
+    it('stores the user without a password, so they cannot sign in yet', async () => {
+      const body = buildInviteBody();
 
-      await login(app, body.email);
+      const response = await inviteUser(app, token, body).expect(201);
+
+      const rows = await dbQuery<{ passwordHash: string | null }>(
+        app,
+        'SELECT "passwordHash" FROM "user" WHERE id = $1',
+        [response.body.userId]
+      );
+
+      expect(rows[0].passwordHash).toBeNull();
+      await loginRequest(app, { email: body.email, password: '' }).expect(400);
+    });
+
+    it('marks the user as invited', async () => {
+      const response = await inviteUser(app, token, buildInviteBody()).expect(201);
+
+      const invited = await getUser(app, token, response.body.userId).expect(200);
+
+      expect(invited.body.invited).toBe(true);
     });
 
     it('stores the requested roles', async () => {
-      const body = buildCreateBody({ userRoleIds: [UserRoleId.USER_ADMIN, UserRoleId.SYSTEM_ADMIN] });
+      const body = buildInviteBody({ userRoleIds: [UserRoleId.USER_ADMIN, UserRoleId.SYSTEM_ADMIN] });
 
-      const response = await createUser(app, token, body).expect(201);
+      const response = await inviteUser(app, token, body).expect(201);
 
-      const created = await getUser(app, token, Number(response.text)).expect(200);
+      const invited = await getUser(app, token, response.body.userId).expect(200);
 
-      expect(created.body.userRoleIds).toEqual(
+      expect(invited.body.userRoleIds).toEqual(
         expect.arrayContaining([UserRoleId.USER_ADMIN, UserRoleId.SYSTEM_ADMIN])
       );
     });
 
-    it('stores the password as a hash', async () => {
-      const body = buildCreateBody();
-
-      const response = await createUser(app, token, body).expect(201);
-
-      const rows = await dbQuery<{ passwordHash: string }>(app, 'SELECT "passwordHash" FROM "user" WHERE id = $1', [
-        Number(response.text),
-      ]);
-
-      expect(rows[0].passwordHash).not.toBe(TEST_PASSWORD);
-    });
-
     it('rejects a duplicate email', async () => {
-      const body = buildCreateBody();
+      const body = buildInviteBody();
 
-      await createUser(app, token, body).expect(201);
-      await createUser(app, token, body).expect(400);
+      await inviteUser(app, token, body).expect(201);
+      await inviteUser(app, token, body).expect(400);
     });
 
     it('rejects an email that differs only by case', async () => {
-      const body = buildCreateBody();
+      const body = buildInviteBody();
 
-      await createUser(app, token, body).expect(201);
-      await createUser(app, token, { ...body, email: body.email.toUpperCase() }).expect(400);
+      await inviteUser(app, token, body).expect(201);
+      await inviteUser(app, token, { ...body, email: body.email.toUpperCase() }).expect(400);
     });
 
     it('rejects a malformed email', async () => {
-      await createUser(app, token, buildCreateBody({ email: 'not-an-email' })).expect(400);
+      await inviteUser(app, token, buildInviteBody({ email: 'not-an-email' })).expect(400);
     });
 
-    it('rejects a password that fails the complexity rule', async () => {
-      await createUser(app, token, buildCreateBody({ password: 'weak' })).expect(400);
+    it('rejects a password, which only the invited user chooses', async () => {
+      await inviteUser(app, token, buildInviteBody({ password: TEST_PASSWORD })).expect(400);
     });
 
     it('rejects a role id that is not a known role', async () => {
-      await createUser(app, token, buildCreateBody({ userRoleIds: [9999] })).expect(400);
+      await inviteUser(app, token, buildInviteBody({ userRoleIds: [9999] })).expect(400);
+    });
+  });
+
+  describe('making a password link', () => {
+    it('answers a link for another user', async () => {
+      const user = await createTestUser(app);
+
+      const response = await createPasswordLink(app, token, user.id).expect(201);
+
+      expect(response.body.link).toMatch(/\/set-password#[0-9a-f]{64}$/);
+    });
+
+    it("refuses a link for the caller's own account", async () => {
+      await createPasswordLink(app, token, admin.id).expect(400);
+    });
+
+    it('refuses a link for a disabled account', async () => {
+      const user = await createTestUser(app, { enabled: false });
+
+      await createPasswordLink(app, token, user.id).expect(400);
+    });
+
+    it('rejects a user id that does not exist', async () => {
+      await createPasswordLink(app, token, 2147483647).expect(400);
     });
   });
 
@@ -161,36 +194,34 @@ describe('Admin user management (integration)', () => {
       expect(response.body.userRoleIds).toEqual([]);
     });
 
-    it('changes the password the user signs in with', async () => {
+    it('rejects a password field on an update', async () => {
       const user = await createTestUser(app);
 
       await updateUser(app, token, user.id, {
         name: user.name,
         email: user.email,
-        password: NEW_PASSWORD,
+        password: 'An0ther$Pass',
         userRoleIds: [],
-      }).expect(200);
-
-      await login(app, user.email, NEW_PASSWORD);
+      }).expect(400);
     });
 
-    it('ends a session held against the old password', async () => {
-      const user = await createTestUser(app);
-      const userToken = await login(app, user.email);
+    it("refuses a change to the caller's own roles", async () => {
+      await updateUser(app, token, admin.id, { name: admin.name, email: admin.email, userRoleIds: [] }).expect(400);
 
-      await getProfile(app, userToken).expect(200);
+      const response = await getUser(app, token, admin.id).expect(200);
 
-      await updateUser(app, token, user.id, {
-        name: user.name,
-        email: user.email,
-        password: NEW_PASSWORD,
-        userRoleIds: [],
-      }).expect(200);
-
-      await getProfile(app, userToken).expect(401);
+      expect(response.body.userRoleIds).toEqual([UserRoleId.USER_ADMIN]);
     });
 
-    it('leaves a session alone when the update carries no password', async () => {
+    it('lets the caller save their own profile while keeping their roles', async () => {
+      await updateUser(app, token, admin.id, {
+        name: admin.name,
+        email: admin.email,
+        userRoleIds: [UserRoleId.USER_ADMIN],
+      }).expect(200);
+    });
+
+    it('leaves a session alone', async () => {
       const user = await createTestUser(app);
       const userToken = await login(app, user.email);
 
@@ -199,7 +230,7 @@ describe('Admin user management (integration)', () => {
       await getProfile(app, userToken).expect(200);
     });
 
-    it('leaves the password alone when the request omits it', async () => {
+    it('leaves the password alone', async () => {
       const user = await createTestUser(app);
 
       await updateUser(app, token, user.id, { name: 'Renamed', email: user.email, userRoleIds: [] }).expect(200);
@@ -273,6 +304,24 @@ describe('Admin user management (integration)', () => {
       const userToken = await login(app, user.email);
 
       await getProfile(app, userToken).expect(200);
+    });
+
+    it("refuses to disable the caller's own account", async () => {
+      await updateUserState(app, token, admin.id, { enabled: false }).expect(400);
+
+      const response = await getUser(app, token, admin.id).expect(200);
+
+      expect(response.body.enabled).toBe(true);
+    });
+
+    it('keeps a session from coming back when the account is enabled again', async () => {
+      const user = await createTestUser(app);
+      const userToken = await login(app, user.email);
+
+      await updateUserState(app, token, user.id, { enabled: false }).expect(200);
+      await updateUserState(app, token, user.id, { enabled: true }).expect(200);
+
+      await getProfile(app, userToken).expect(401);
     });
 
     it('rejects a non-boolean enabled flag', async () => {

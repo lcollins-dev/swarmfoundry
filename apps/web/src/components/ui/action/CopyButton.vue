@@ -48,7 +48,7 @@ const props = defineProps({
   /** Shown when the browser refuses clipboard access, where the user has to fall back to copying by hand. */
   failureContent: {
     type: String,
-    default: 'Your browser blocked clipboard access. Copy the value by hand instead.',
+    default: 'Could not copy to the clipboard. Select and copy the text manually.',
   },
 });
 

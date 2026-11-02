@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CreateUserRequestDto, UpdateUserRequestDto, UserListStatus, UserRoleId } from '@libs/dto';
+import { InviteUserRequestDto, UpdateUserRequestDto, UserListStatus, UserRoleId } from '@libs/dto';
 
 import { User } from '@/core/user/entities/user.entity';
 
@@ -10,12 +10,14 @@ import { UserService } from '@/core/user/user.service';
 
 import { UserAdminController } from '@/api/v1/user/user-admin.controller';
 
-const buildCreateUserRequest = (): CreateUserRequestDto => ({
+const buildInviteUserRequest = (): InviteUserRequestDto => ({
   name: 'Tester',
   email: 'tester@example.com',
-  password: 'Sup3r$ecret',
   userRoleIds: [UserRoleId.USER_ADMIN],
 });
+
+const caller = new User({ name: 'Admin', email: 'admin@example.com', passwordHash: 'hash' });
+caller.id = 1;
 
 const buildUpdateUserRequest = (overrides: Partial<UpdateUserRequestDto> = {}): UpdateUserRequestDto => ({
   name: 'Tester',
@@ -26,9 +28,9 @@ const buildUpdateUserRequest = (overrides: Partial<UpdateUserRequestDto> = {}): 
 
 describe('UserAdminController', () => {
   let controller: UserAdminController;
-  let createUserMock: ReturnType<typeof vi.fn>;
-  let updateProfileMock: ReturnType<typeof vi.fn>;
-  let updateRolesMock: ReturnType<typeof vi.fn>;
+  let inviteUserMock: ReturnType<typeof vi.fn>;
+  let updateUserMock: ReturnType<typeof vi.fn>;
+  let createPasswordLinkMock: ReturnType<typeof vi.fn>;
   let invalidateSessionsMock: ReturnType<typeof vi.fn>;
   let getRoleListMock: ReturnType<typeof vi.fn>;
   let getUserStatsMock: ReturnType<typeof vi.fn>;
@@ -37,9 +39,9 @@ describe('UserAdminController', () => {
   let updateStateMock: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
-    createUserMock = vi.fn();
-    updateProfileMock = vi.fn().mockResolvedValue(undefined);
-    updateRolesMock = vi.fn().mockResolvedValue(undefined);
+    inviteUserMock = vi.fn();
+    updateUserMock = vi.fn().mockResolvedValue(undefined);
+    createPasswordLinkMock = vi.fn();
     invalidateSessionsMock = vi.fn().mockResolvedValue(undefined);
     getRoleListMock = vi.fn();
     getUserStatsMock = vi.fn();
@@ -53,9 +55,6 @@ describe('UserAdminController', () => {
         {
           provide: UserService,
           useValue: {
-            createUser: createUserMock,
-            updateProfile: updateProfileMock,
-            updateRoles: updateRolesMock,
             invalidateSessions: invalidateSessionsMock,
           },
         },
@@ -67,6 +66,9 @@ describe('UserAdminController', () => {
             getUserList: getUserListMock,
             getUser: getUserMock,
             updateState: updateStateMock,
+            inviteUser: inviteUserMock,
+            updateUser: updateUserMock,
+            createPasswordLink: createPasswordLinkMock,
           },
         },
       ],
@@ -97,50 +99,40 @@ describe('UserAdminController', () => {
     expect(getUserListMock).toHaveBeenCalledWith(userListRequest, 2);
   });
 
-  describe('createUser', () => {
-    it('returns only the new user id', async () => {
-      const created = new User({ name: 'Tester', email: 'tester@example.com', passwordHash: 'hash' });
-      created.id = 42;
-      createUserMock.mockResolvedValue(created);
+  describe('inviteUser', () => {
+    it('answers what the service answers', async () => {
+      const invited = { userId: 42, passwordLink: { link: 'link', expiresAt: new Date(), emailed: true } };
+      inviteUserMock.mockResolvedValue(invited);
 
-      const userId = await controller.createUser(buildCreateUserRequest());
+      await expect(controller.inviteUser(buildInviteUserRequest())).resolves.toBe(invited);
 
-      expect(userId).toBe(42);
-    });
-
-    it('creates the user with the requested roles and without a welcome email', async () => {
-      const created = new User({ name: 'Tester', email: 'tester@example.com', passwordHash: 'hash' });
-      created.id = 42;
-      createUserMock.mockResolvedValue(created);
-
-      await controller.createUser(buildCreateUserRequest());
-
-      expect(createUserMock).toHaveBeenCalledWith('Tester', 'tester@example.com', 'Sup3r$ecret', [
-        UserRoleId.USER_ADMIN,
-      ]);
+      expect(inviteUserMock).toHaveBeenCalledWith(buildInviteUserRequest());
     });
   });
 
   describe('updateUser', () => {
-    it('updates the profile and then the roles for the addressed user', async () => {
-      await controller.updateUser(7, buildUpdateUserRequest({ userRoleIds: [UserRoleId.SYSTEM_ADMIN] }));
+    it('passes the caller through, so the service can refuse their own roles', async () => {
+      const request = buildUpdateUserRequest({ userRoleIds: [UserRoleId.SYSTEM_ADMIN] });
 
-      expect(updateProfileMock).toHaveBeenCalledWith('Tester', 'tester@example.com', undefined, 7);
-      expect(updateRolesMock).toHaveBeenCalledWith([UserRoleId.SYSTEM_ADMIN], 7);
-    });
+      await controller.updateUser(caller, 7, request);
 
-    it('forwards a new password when one is supplied', async () => {
-      await controller.updateUser(7, buildUpdateUserRequest({ password: 'Sup3r$ecret' }));
-
-      expect(updateProfileMock).toHaveBeenCalledWith('Tester', 'tester@example.com', 'Sup3r$ecret', 7);
+      expect(updateUserMock).toHaveBeenCalledWith(caller, request, 7);
     });
   });
 
   describe('updateState', () => {
     it('unwraps the enabled flag from the body', async () => {
-      await controller.updateState(7, { enabled: false });
+      await controller.updateState(caller, 7, { enabled: false });
 
-      expect(updateStateMock).toHaveBeenCalledWith(false, 7);
+      expect(updateStateMock).toHaveBeenCalledWith(caller, false, 7);
+    });
+  });
+
+  describe('createPasswordLink', () => {
+    it('passes the caller and the addressed user through', async () => {
+      await controller.createPasswordLink(caller, 7);
+
+      expect(createPasswordLinkMock).toHaveBeenCalledWith(caller, 7);
     });
   });
 

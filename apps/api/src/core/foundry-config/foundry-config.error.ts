@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { IConfigIssue, KeyPath } from './foundry-config.types';
+import type { IConfigIssue, KeyPath } from './types/foundry-config.types';
 import { ConfigError } from '@/config/config.schema';
 
 export function formatKeyPath(path: KeyPath): string {

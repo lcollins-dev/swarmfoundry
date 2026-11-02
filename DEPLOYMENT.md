@@ -3,8 +3,8 @@
 Run Swarmfoundry with Docker Compose:
 
 - The **app** polls GitLab, matches triggers and starts agent containers through the host's Docker daemon. It also
-  serves the web interface on localhost.
-- Compose builds the **agent image** from `config/agent/Dockerfile`. Add your projects' tools to this image.
+  serves the console on localhost.
+- Compose builds the **agent image** from `agent/Dockerfile`. Add your projects' tools to this image.
 - **Postgres** stores tasks, runs, transcripts and config revisions.
 
 You need Docker Engine 28 or later with the Compose plugin, a GitLab instance, and a Claude subscription or an
@@ -28,7 +28,7 @@ Anthropic API key for the agents.
    the host. Use the matching release image.
 
 4. Create your config in `config/swarmfoundry.yaml`. An [example config](resources/compose/config/README.md) is
-   provided with inline explanations. Keep `config/agent/Dockerfile` and add any tools your agents need.
+   provided with inline explanations. Add any tools your agents need to `agent/Dockerfile`.
 
 5. Run `cp .env.tpl .env`, then fill it in:
 
@@ -44,14 +44,23 @@ Anthropic API key for the agents.
 7. Check `docker compose logs app` for `Loaded swarmfoundry.yaml` and `Polling the source`, with no errors.
    If a `${VAR}` is missing, the app stops and names it in the error.
 
-8. Open the web interface at `http://localhost:8080` on the host.
+8. Open the console at `http://localhost:8080` on the host.
 
    Sign in as `admin@example.com` with password `changeme`, and set your own email and password on the setup
-   screen immediately. Anyone who can reach the web interface can use these credentials until you change them.
+   screen immediately. Anyone who can reach the console can use these credentials until you change them.
 
 9. Test with a small issue that matches a trigger. For the example config, add `workflow::ready` and assign the bot.
    Within a poll interval, look for `Queued task` in the logs. While the agent runs, `docker ps` shows a container
    named `<namespace>-task<id>-run1-step<n>-agent`, where `<n>` is its position in the trigger's `steps`.
+
+## Users
+
+Invite people from the console's Users page. Each invite makes a one-time link that lets them choose their own
+password, and a user admin makes a reset link the same way. Nobody sets another person's password.
+
+- Set `WEB_APP_BASE_URL` in `app.env` to the address people open the console at. Links point there.
+- Set `EMAIL_SMTP_HOST`, and `EMAIL_SMTP_USERNAME` and `EMAIL_SMTP_PASSWORD` where your relay needs them, to email
+  the links. The console also shows each link once, for when the email fails.
 
 ## Config from a repository
 
@@ -62,15 +71,33 @@ To load config from a Git repository and track a branch, set these values in `.e
 - `SWARMFOUNDRY_CONFIG_TOKEN`: token with read access.
 - `SWARMFOUNDRY_CONFIG_PATH`: config directory within the repository, if not at its root.
 
-Keep `agent/Dockerfile` in the local `config/` directory and secrets in `.env`. Reference secrets as `${VAR}` in the
+Keep `agent/Dockerfile` and `.env`, with its secrets, on the host. Reference secrets as `${VAR}` in the
 repository's config. Each task uses the revision it started with.
 
 Changes load within `SWARMFOUNDRY_CONFIG_POLL_INTERVAL`, logging `Loaded config revision <sha>`. Invalid revisions
 log `Revision <sha> is invalid` for each error; the app keeps the previous config.
 
+## Agent commands
+
+Swarmfoundry stops an agent's Bash command, and every process it started, a minute past the command's timeout, so a
+hung command cannot hold a run open until the step's `timeout`.
+
+- A command gets its own `timeout`, or 2 minutes without one, capped at 10 minutes. Set `BASH_DEFAULT_TIMEOUT_MS` or
+  `BASH_MAX_TIMEOUT_MS` in an environment's `env` or an agent's settings `env` to change them. A project's own Claude
+  settings cannot.
+- A `run_in_background` command without a `timeout` gets 10 minutes, or the default where that is larger. Only a
+  `BASH_DEFAULT_TIMEOUT_MS` above 10 minutes changes it, and nothing shortens it.
+- Claude's own sandbox is always off in the agent's settings, as it would hide commands from the limit. The container
+  is the sandbox.
+- The agent image needs bash 5 or later, `jq` and `setsid` in `/usr/local/sbin`, `/usr/local/bin`, `/usr/sbin`,
+  `/usr/bin`, `/sbin` or `/bin`. A run in an image without them fails, naming what is missing.
+- The app logs each stop at `warn` as `The command limit stopped an agent command`, with the task, run, tool call and
+  command.
+
 ## Upgrading
 
-1. Copy the new release's `resources/compose` files, other than `config/`, over your copy.
+1. Copy the new release's `resources/compose` files, other than `config/`, `agent/` and `app.env`, over your copy.
+   Compare `app.env` and `agent/Dockerfile` with the release's and bring over what changed.
 2. Set `SWARMFOUNDRY_VERSION` in `.env` to the new version.
 3. Run `docker compose pull --ignore-buildable && docker compose up -d --build`.
 

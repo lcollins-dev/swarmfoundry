@@ -1,7 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CanRegisterResponseDto, ProfileResponseDto, TokenResponseDto, UpdateProfileResponseDto } from '@libs/dto';
+import { ProfileResponseDto, TokenResponseDto, UpdateProfileResponseDto } from '@libs/dto';
 
 import { RequestType } from '@/types/api';
 import { ApiError, ApiErrorBase } from '@/types/api/error';
@@ -48,27 +48,6 @@ describe('useUserService', () => {
     } as unknown as ReturnType<typeof useErrorService>);
 
     useNotificationStore().clearAllNotifications = clearAllNotificationsMock;
-  });
-
-  describe('canRegister', () => {
-    it('stores the flag on the user store', async () => {
-      makeRequestMock.mockResolvedValue({ canRegister: true });
-
-      await useUserService().canRegister();
-
-      expect(makeRequestMock).toHaveBeenCalledWith('user/register', RequestType.GET, {
-        response: CanRegisterResponseDto,
-      });
-      expect(useUserStore().canRegister).toBe(true);
-    });
-
-    it('hands a failure to the error service', async () => {
-      makeRequestMock.mockRejectedValue(new ApiError(ApiErrorBase.NETWORK));
-
-      await expect(useUserService().canRegister()).rejects.toThrow();
-
-      expect(handleErrorMock).toHaveBeenCalled();
-    });
   });
 
   describe('login', () => {
@@ -128,21 +107,6 @@ describe('useUserService', () => {
       await expect(useUserService().login({ email: 'tester@example.com', password: 'pw' })).rejects.toThrow();
 
       expect(useUserStore().loggedIn).toBe(false);
-    });
-  });
-
-  describe('register', () => {
-    it('stores the token and loads the profile', async () => {
-      makeRequestMock.mockResolvedValueOnce({ token: 'signed-jwt' }).mockResolvedValueOnce(PROFILE);
-
-      await useUserService().register({ name: 'Tester', email: 'tester@example.com', password: 'pw' }, 'register');
-
-      expect(makeRequestMock).toHaveBeenNthCalledWith(1, 'user/register', RequestType.POST, {
-        response: TokenResponseDto,
-        form: 'register',
-        body: { name: 'Tester', email: 'tester@example.com', password: 'pw' },
-      });
-      expect(useUserStore().profile).toEqual(PROFILE);
     });
   });
 

@@ -36,7 +36,7 @@ test.describe('first-time setup', () => {
     await expect(firstTimeSetupPage.heading).toBeVisible();
     await expect(firstTimeSetupPage.emailInput).toHaveValue(admin.email);
 
-    await page.goto(webRoute('/admin/users'));
+    await page.goto(webRoute('/users'));
     await expect(page).toHaveURL(/\/setup$/);
 
     const token = await page.evaluate(() => localStorage.getItem('token'));
@@ -47,7 +47,7 @@ test.describe('first-time setup', () => {
     expect(refused.status()).toBe(403);
 
     await firstTimeSetupPage.finish(admin.password);
-    await expect(page.getByText('Choose a new password, not the one you signed in with.')).toBeVisible();
+    await expect(page.getByText('Choose a password different from your current one.')).toBeVisible();
     await expect(page).toHaveURL(/\/setup$/);
 
     const newEmail = uniqueEmail('setup');
@@ -56,11 +56,11 @@ test.describe('first-time setup', () => {
     await firstTimeSetupPage.emailInput.fill(newEmail);
     await firstTimeSetupPage.finish(newPassword);
 
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page).toHaveURL(/\/overview$/);
     await expect(page.getByText('Account set up', { exact: true })).toBeVisible();
 
-    await page.goto(webRoute('/admin/users'));
-    await expect(page).toHaveURL(/\/admin\/users$/);
+    await page.goto(webRoute('/users'));
+    await expect(page).toHaveURL(/\/users$/);
 
     await headerMenu.select('Sign out');
     await expect(page).toHaveURL(/\/sign-in/);

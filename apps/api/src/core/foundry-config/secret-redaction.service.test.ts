@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
 
 import { REDACTED, SecretRedactionService } from '@/core/foundry-config/secret-redaction.service';
 
@@ -89,6 +90,156 @@ describe('SecretRedactionService', () => {
       ];
 
       expect(secretRedactionService.collect({}, substitutions)).toEqual(new Set());
+    });
+
+    it('keeps to its own key words, so a key only a served file reads as secret stays readable live', () => {
+      const substitutions = [
+        { path: ['environments', 'node', 'env', 'sortKey'], value: 'createdDate' },
+        { path: ['environments', 'node', 'env', 'DB_PWD'], value: 'pwd-secret-value' },
+        { path: ['environments', 'node', 'env', 'GITLAB_PAT'], value: 'pat-secret-value' },
+      ];
+
+      expect(secretRedactionService.collect({}, substitutions)).toEqual(new Set());
+    });
+  });
+
+  describe('maskCredentials', () => {
+    it('masks a URL password of any length, keeping the user and host', () => {
+      expect(secretRedactionService.maskCredentials('postgres://bot:hunter3@db.example.com/app')).toBe(
+        `postgres://bot:${REDACTED}@db.example.com/app`
+      );
+    });
+
+    it('masks a password that holds an @ whole, as a URL parser reads it', () => {
+      expect(secretRedactionService.maskCredentials('postgres://app:p@ssw0rd!x@db.example.com:5432/app')).toBe(
+        `postgres://app:${REDACTED}@db.example.com:5432/app`
+      );
+    });
+
+    it('leaves a URL with a user alone, or a ${VAR} password', () => {
+      const text = 'ssh://git@gitlab.example.com/x.git https://bot:${DB_PASSWORD}@db.example.com';
+
+      expect(secretRedactionService.maskCredentials(text)).toBe(text);
+    });
+
+    it('keeps a URL inside its JSON string, leaving a later field with an @ alone', () => {
+      const text = '{"env":{"BASE_URL":"https://api.example.com","CONTACT":"bot@example.com"}}';
+
+      expect(secretRedactionService.maskCredentials(text)).toBe(text);
+    });
+
+    it('masks an auth header credential, after its scheme', () => {
+      const text = 'Authorization=Bearer s3cr3t-otlp-key,PRIVATE-TOKEN: abc123 -H "Authorization: Basic dXNlcjpwYXNz"';
+
+      expect(secretRedactionService.maskCredentials(text)).toBe(
+        `Authorization=Bearer ${REDACTED},PRIVATE-TOKEN: ${REDACTED} -H "Authorization: Basic ${REDACTED}"`
+      );
+    });
+
+    it('masks an auth header credential written as JSON', () => {
+      expect(secretRedactionService.maskCredentials('{"headers":{"Authorization":"Bearer abc123def456"}}')).toBe(
+        `{"headers":{"Authorization":"Bearer ${REDACTED}"}}`
+      );
+    });
+
+    it('leaves a header that reads its credential from a variable, and prose', () => {
+      const text = 'Send Authorization: Bearer $GITLAB_TOKEN for basic usage.';
+
+      expect(secretRedactionService.maskCredentials(text)).toBe(text);
+    });
+
+    it('masks a token by its prefix, wherever it sits', () => {
+      expect(secretRedactionService.maskCredentials('Clone with glpat-promptsecret or sk-ant-short.')).toBe(
+        `Clone with ${REDACTED} or ${REDACTED}.`
+      );
+    });
+  });
+
+  describe('collectWritten', () => {
+    it('collects a written secret only from the minimum length, since it is masked wherever it appears', () => {
+      const yaml = 'sources:\n  gl:\n    token: abc\n    # token: test\n    # DB_PASSWORD: "Xk9#mP2qL7"\n';
+
+      expect([...secretRedactionService.collectWritten(parse(yaml), yaml)]).toEqual(['Xk9#mP2qL7']);
+    });
+  });
+
+  describe('maskKeyedValues', () => {
+    it('masks a value of any length under a secret key, in YAML and in JSON, and nothing else', () => {
+      const yaml = [
+        'env:',
+        '  POSTGRES_PASSWORD: hunter2',
+        "  DB_PWD: 'pw1'",
+        '  GITLAB_HOST: gitlab.example.com',
+        '  services: { db: { GITLAB_PAT: abc, PORT: 5432 } }',
+        '',
+      ].join('\n');
+      const json = JSON.stringify({ env: { OTEL_EXPORTER_OTLP_HEADERS: 'x-key=abc', GIT_HOST: 'gitlab.example.com' } });
+
+      expect(secretRedactionService.maskKeyedValues(yaml)).toBe(
+        [
+          'env:',
+          `  POSTGRES_PASSWORD: ${REDACTED}`,
+          `  DB_PWD: '${REDACTED}'`,
+          '  GITLAB_HOST: gitlab.example.com',
+          `  services: { db: { GITLAB_PAT: ${REDACTED}, PORT: 5432 } }`,
+          '',
+        ].join('\n')
+      );
+      expect(JSON.parse(secretRedactionService.maskKeyedValues(json))).toEqual({
+        env: { OTEL_EXPORTER_OTLP_HEADERS: REDACTED, GIT_HOST: 'gitlab.example.com' },
+      });
+    });
+
+    it('masks a value of any length on a commented-out secret key line', () => {
+      const yaml = 'env:\n  # POSTGRES_PASSWORD: hunter2  # old\n  # GITLAB_HOST: gitlab.example.com\n  A: b\n';
+
+      expect(secretRedactionService.maskKeyedValues(yaml)).toBe(
+        `env:\n  # POSTGRES_PASSWORD: ${REDACTED}  # old\n  # GITLAB_HOST: gitlab.example.com\n  A: b\n`
+      );
+    });
+
+    it("leaves a ${VAR} reference and the agent's auth mode readable", () => {
+      const yaml = 'agents:\n  claude:\n    auth: oauth\n    token: ${CLAUDE_TOKEN}\n';
+
+      expect(secretRedactionService.maskKeyedValues(yaml)).toBe(yaml);
+    });
+
+    it('masks a commented-out value whole, up to a trailing comment, whatever it holds', () => {
+      const yaml = `env:\n  # DB_PASSWORD: Xk9#mP2qL7  # old\n  # OLD_PASSWORD: pa"ss-w0rd!\n  A: b\n`;
+
+      expect(secretRedactionService.maskKeyedValues(yaml)).toBe(
+        `env:\n  # DB_PASSWORD: ${REDACTED}  # old\n  # OLD_PASSWORD: ${REDACTED}\n  A: b\n`
+      );
+    });
+
+    it('masks a value a secret key reaches through an alias, where its anchor sits', () => {
+      const yaml = 'x-pw: &pw hunter2\nenv:\n  DB_PASSWORD: *pw\n  OTHER_PASSWORD: *pw\n';
+
+      expect(secretRedactionService.maskKeyedValues(yaml)).toBe(
+        `x-pw: &pw ${REDACTED}\nenv:\n  DB_PASSWORD: *pw\n  OTHER_PASSWORD: *pw\n`
+      );
+    });
+
+    it('masks an auth key anywhere but an agent', () => {
+      const yaml = [
+        'environments:',
+        '  node:',
+        '    agent: { auth: oauth }',
+        '    services: { redis: { env: { auth: hunter4 } } }',
+        'triggers:',
+        '  implement:',
+        '    steps:',
+        '      - agent: { agent: { auth: apiKey } }',
+        '',
+      ].join('\n');
+
+      expect(secretRedactionService.maskKeyedValues(yaml)).toBe(yaml.replace('auth: hunter4', `auth: ${REDACTED}`));
+    });
+
+    it('masks a block scalar whole, keeping the next key on its own line', () => {
+      const yaml = 'DEPLOY_KEY: |\n  line-one\n  line-two\nNEXT: value\n';
+
+      expect(secretRedactionService.maskKeyedValues(yaml)).toBe(`DEPLOY_KEY: ${REDACTED}\nNEXT: value\n`);
     });
   });
 

@@ -21,6 +21,7 @@ export interface IPagedListOptions<TRequest, TItem> {
   fetch: (request: TRequest, page: number) => Promise<IListPage<TItem>>;
   /** Set false for a request that changes on navigation rather than typing, so it fetches at once. */
   debounceRequest?: boolean;
+  live?: boolean;
 }
 
 export const usePagedList = <TRequest, TItem>(options: IPagedListOptions<TRequest, TItem>) => {
@@ -74,11 +75,21 @@ export const usePagedList = <TRequest, TItem>(options: IPagedListOptions<TReques
       return request === null ? null : { request, page: page.value };
     }),
     fetch: (pageRequest: IPageRequest<TRequest>) => options.fetch(pageRequest.request, pageRequest.page),
+    live: options.live,
   });
 
   const list = computed(() => data.value?.list ?? []);
   const pages = computed(() => data.value?.pages ?? 1);
   const total = computed(() => data.value?.total ?? 0);
+
+  // A list that shrank while open, such as on a live refresh, can leave the page past its last one.
+  watch(data, pageData => {
+    const lastPage = Math.max(1, pageData?.pages ?? 1);
+
+    if (page.value > lastPage) {
+      page.value = lastPage;
+    }
+  });
 
   return { list, page, pages, total, loading, load };
 };

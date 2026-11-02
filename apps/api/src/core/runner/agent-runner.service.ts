@@ -26,10 +26,10 @@ import {
   type ISandboxFile,
   type ISandboxIds,
   type StopSignal,
-} from './runner.types';
-import type { IAgentRunner, IAgentRunRequest } from '@/core/actions/actions.types';
-import type { IResolvedAgent } from '@/core/foundry-config/foundry-config.types';
-import { DeploymentFault, RunEndReason, type IRunReport } from '@/core/task/task.types';
+} from './types/runner.types';
+import type { IAgentRunner, IAgentRunRequest } from '@/core/actions/types/actions.types';
+import type { IResolvedAgent } from '@/core/foundry-config/types/foundry-config.types';
+import { DeploymentFault, RunEndReason, type IRunReport } from '@/core/task/types/task.types';
 
 export const PROMPT_PATH = '/foundry/prompt.md';
 export const SYSTEM_PROMPT_PATH = '/foundry/system.md';
@@ -46,12 +46,16 @@ export const ENTRYPOINT_SOURCE = join(__dirname, 'agent-entrypoint.sh');
 /** Shipped beside this file, and put before the step's own system prompt in every run. */
 export const RUNNER_SYSTEM_PROMPT_SOURCE = join(__dirname, 'runner-system-prompt.md');
 
-/** Defaults for long unattended runs, which the environment's `env` overrides. See the runner design, "Agent image". */
+/** Defaults for long unattended runs, which the environment's `env` overrides. They also win over the image's `ENV`. */
 export const AGENT_ENV_DEFAULTS: Readonly<Record<string, string>> = {
+  // `-p` otherwise kills background subagents 10 minutes after the main turn ends, and still exits 0.
   CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: '0',
+  // Waits out rate limits, where a run otherwise fails after 10 API retries.
   CLAUDE_CODE_RETRY_WATCHDOG: '1',
+  // Each container throws its auto-memory directory away.
   CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
   CLAUDE_CODE_SYNC_PLUGIN_INSTALL: '1',
+  // The image pins the CLI, which an update mid-run would change under the agent.
   DISABLE_AUTOUPDATER: '1',
 };
 
@@ -205,7 +209,7 @@ export class AgentRunnerService implements IAgentRunner {
     };
     const { environment, agent } = step;
 
-    const output = this.agentOutputService.create(run.id, agent);
+    const output = this.agentOutputService.create(task.id, run.id, agent);
     const env = await this.agentEnv(request, detach);
     const files = await this.agentFiles(request);
 
@@ -306,7 +310,7 @@ export class AgentRunnerService implements IAgentRunner {
       };
     }
 
-    const output = this.agentOutputService.create(run.id, step.agent, storedLineCount);
+    const output = this.agentOutputService.create(task.id, run.id, step.agent, storedLineCount);
     const watch = this.watch(output);
     const logs = await this.sandboxService.followLogs(agent.id, detach, watch.sinks);
 

@@ -51,6 +51,10 @@
     "vitest": "4.1.12"
   },
   "overrides": {
-    "multer": "2.5.0"
+    "multer": "2.5.0",
+    "typeorm": {
+      "glob": "14.0.2",
+      "minimatch": "11.0.1"
+    }
   }
 }

@@ -8,7 +8,7 @@ import { FoundryConfigService } from '@/core/foundry-config/foundry-config.servi
 import { IssueSourceService } from '@/core/issue-source/issue-source.service';
 import { TaskService } from '@/core/task/task.service';
 
-import type { IIssueEvent, IMergeRequestEvent, ISourceEvent } from '@/core/issue-source/issue-source.types';
+import type { IIssueEvent, IMergeRequestEvent, ISourceEvent } from '@/core/issue-source/types/issue-source.types';
 
 @Injectable()
 export class TriggerEngineService implements OnApplicationBootstrap, BeforeApplicationShutdown {

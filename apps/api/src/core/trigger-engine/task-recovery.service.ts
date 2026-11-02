@@ -5,7 +5,7 @@ import { StepExecutorService } from '@/core/actions/step-executor.service';
 import { FoundryConfigService } from '@/core/foundry-config/foundry-config.service';
 import { TaskService } from '@/core/task/task.service';
 
-import { stepsIn } from '@/core/task/step-list';
+import { stepsIn } from '@/core/task/utils/step-list.util';
 
 @Injectable()
 export class TaskRecoveryService {

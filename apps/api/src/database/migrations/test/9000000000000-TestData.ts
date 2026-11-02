@@ -18,7 +18,7 @@ const NOTIFICATION_TYPES = [
     id: 9001,
     name: 'Batch job finished',
     severity: NotificationSeverity.SUCCESS,
-    pageUrl: '/admin/batch-jobs',
+    pageUrl: '/batch-jobs',
   },
   {
     id: 9002,
@@ -30,13 +30,13 @@ const NOTIFICATION_TYPES = [
     id: 9003,
     name: 'New user added',
     severity: NotificationSeverity.INFO,
-    pageUrl: '/admin/users',
+    pageUrl: '/users',
   },
   {
     id: 9004,
     name: 'Batch job failed',
     severity: NotificationSeverity.ERROR,
-    pageUrl: '/admin/batch-jobs',
+    pageUrl: '/batch-jobs',
   },
 ];
 

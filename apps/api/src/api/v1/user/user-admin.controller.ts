@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 
 import {
-  CreateUserRequestDto,
+  InviteUserRequestDto,
+  InviteUserResponseDto,
+  PasswordLinkDto,
   UpdateStateRequestDto,
   UpdateUserRequestDto,
   UserDto,
@@ -15,7 +17,10 @@ import {
 } from '@libs/dto';
 
 import { AllowedRoles } from './decorators/allowed-roles.decorator';
+import { GetUser } from './decorators/user.decorator';
 import { ZodPipe } from '@/common/pipes/zod.pipe';
+
+import { User } from '@/core/user/entities/user.entity';
 
 import { UserAdminService } from './user-admin.service';
 import { UserService } from '@/core/user/user.service';
@@ -46,16 +51,11 @@ export class UserAdminController {
     return this.userAdminService.getUserList(userListRequest, page);
   }
 
-  @Post()
-  async createUser(@Body(new ZodPipe(CreateUserRequestDto)) createUserRequest: CreateUserRequestDto): Promise<number> {
-    const user = await this.userService.createUser(
-      createUserRequest.name,
-      createUserRequest.email,
-      createUserRequest.password,
-      createUserRequest.userRoleIds
-    );
-
-    return user.id;
+  @Post('invite')
+  inviteUser(
+    @Body(new ZodPipe(InviteUserRequestDto)) inviteUserRequest: InviteUserRequestDto
+  ): Promise<InviteUserResponseDto> {
+    return this.userAdminService.inviteUser(inviteUserRequest);
   }
 
   @Get(':userId')
@@ -64,25 +64,29 @@ export class UserAdminController {
   }
 
   @Patch(':userId')
-  async updateUser(
+  updateUser(
+    @GetUser() caller: User,
     @Param('userId', new ZodPipe(IdParamDto)) userId: number,
     @Body(new ZodPipe(UpdateUserRequestDto)) updateUserRequest: UpdateUserRequestDto
   ): Promise<void> {
-    await this.userService.updateProfile(
-      updateUserRequest.name,
-      updateUserRequest.email,
-      updateUserRequest.password,
-      userId
-    );
-    await this.userService.updateRoles(updateUserRequest.userRoleIds, userId);
+    return this.userAdminService.updateUser(caller, updateUserRequest, userId);
   }
 
   @Patch(':userId/state')
-  async updateState(
+  updateState(
+    @GetUser() caller: User,
     @Param('userId', new ZodPipe(IdParamDto)) userId: number,
     @Body(new ZodPipe(UpdateStateRequestDto)) updateStateRequest: UpdateStateRequestDto
   ): Promise<void> {
-    await this.userAdminService.updateState(updateStateRequest.enabled, userId);
+    return this.userAdminService.updateState(caller, updateStateRequest.enabled, userId);
+  }
+
+  @Post(':userId/password-link')
+  createPasswordLink(
+    @GetUser() caller: User,
+    @Param('userId', new ZodPipe(IdParamDto)) userId: number
+  ): Promise<PasswordLinkDto> {
+    return this.userAdminService.createPasswordLink(caller, userId);
   }
 
   @Patch(':userId/logout-all-sessions')

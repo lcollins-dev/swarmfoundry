@@ -10,5 +10,5 @@ How Swarmfoundry runs you. These hold in every run, whatever the project or the 
 - Swarmfoundry caps a `timeout` at {{maxTimeout}}, whatever the Bash tool allows. Split a longer wait into several calls.
 - Set the `timeout` of a command that may run long.
 - A process a command puts in the background, such as a server started with `&`, keeps running once the command
-  returns. A command still running at its deadline, or a `run_in_background` command stopped at its limit, loses
-  everything it started, its background processes included.
+  returns. A command still running a minute past its `timeout`, `run_in_background` or not, loses everything it
+  started, its background processes included.

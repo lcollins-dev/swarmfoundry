@@ -1,19 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 
-import type { ITriggerMatch } from './trigger-engine.types';
+import type { ITriggerMatch } from './types/trigger-engine.types';
 import type {
   IIssueBlock,
   IIssueTriggerConfig,
   IMergeRequestBlock,
   IMergeRequestTriggerConfig,
   ITriggerConfig,
-} from '@/core/foundry-config/foundry-config.types';
+} from '@/core/foundry-config/types/foundry-config.types';
 import type {
   IIssueChange,
   IIssueEvent,
   IIssueState,
   IMergeRequestEvent,
-} from '@/core/issue-source/issue-source.types';
+} from '@/core/issue-source/types/issue-source.types';
 
 type IssueFields = Pick<IIssueState, 'labels' | 'assignees'>;
 

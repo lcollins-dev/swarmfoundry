@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { AgentResolutionService } from '@/core/foundry-config/agent-resolution.service';
 
-import type { IAgentDefinition } from '@/core/foundry-config/foundry-config.types';
+import type { IAgentDefinition } from '@/core/foundry-config/types/foundry-config.types';
 
 const definitions: Record<string, IAgentDefinition> = {
   subscription: { type: 'claude', auth: 'oauth', token: 'oauth-token', model: 'claude-opus-5-5', settings: './a.json' },

@@ -7,11 +7,19 @@ import { UserRoleId } from '@libs/dto';
 
 import { ALLOWED_ROLES_METADATA_KEY } from '@/api/v1/user/decorators/allowed-roles.decorator';
 import { NO_AUTH_METADATA_KEY } from '@/api/v1/user/decorators/no-auth.decorator';
-import { ALLOWED_DURING_SETUP_METADATA_KEY, AuthGuard, SETUP_REQUIRED_MESSAGE } from '@/api/v1/user/guards/auth.guard';
+import {
+  ALLOW_API_KEY_METADATA_KEY,
+  ALLOWED_DURING_SETUP_METADATA_KEY,
+  API_KEY_INVALID_MESSAGE,
+  API_KEY_NOT_ALLOWED_MESSAGE,
+  AuthGuard,
+  SETUP_REQUIRED_MESSAGE,
+} from '@/api/v1/user/guards/auth.guard';
 
 import { UserUserRole } from '@/core/user/entities/user-user-role.entity';
 import { User } from '@/core/user/entities/user.entity';
 
+import { ApiKeyService } from '@/core/api-key/api-key.service';
 import { NOT_ALLOWED_MESSAGE, SESSION_EXPIRED_MESSAGE, UserService } from '@/core/user/user.service';
 
 interface IMockRequest {
@@ -51,10 +59,12 @@ describe('AuthGuard', () => {
   let guard: AuthGuard;
   let reflectorGet: ReturnType<typeof vi.fn>;
   let checkTokenMock: ReturnType<typeof vi.fn>;
+  let verifyApiKeyMock: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     reflectorGet = vi.fn();
     checkTokenMock = vi.fn();
+    verifyApiKeyMock = vi.fn();
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -66,6 +76,13 @@ describe('AuthGuard', () => {
         {
           provide: UserService,
           useValue: { checkToken: checkTokenMock },
+        },
+        {
+          provide: ApiKeyService,
+          useValue: {
+            isApiKey: (token: string) => token.startsWith('sfk_'),
+            verify: verifyApiKeyMock,
+          },
         },
       ],
     }).compile();
@@ -265,6 +282,77 @@ describe('AuthGuard', () => {
       await guard.canActivate(context);
 
       expect(request.user).toBe(resolvedUser);
+    });
+  });
+
+  describe('API keys', () => {
+    const isHandler = (target: unknown) => typeof target === 'function' && !('prototype' in target);
+    const isController = (target: unknown) => typeof target === 'function' && 'prototype' in target;
+
+    const markHandler = (roleIds: UserRoleId[] = [UserRoleId.SYSTEM_ADMIN]) => {
+      reflectorGet.mockImplementation((key: string, target: unknown) => {
+        if (key === ALLOW_API_KEY_METADATA_KEY && isHandler(target)) {
+          return true;
+        }
+
+        if (key === ALLOWED_ROLES_METADATA_KEY && isController(target)) {
+          return roleIds;
+        }
+
+        return undefined;
+      });
+    };
+
+    it('lets a valid key through to a handler marked for keys, without the session check', async () => {
+      markHandler();
+
+      const owner = buildUserWithRoles([UserRoleId.SYSTEM_ADMIN]);
+      verifyApiKeyMock.mockResolvedValue(owner);
+
+      const request: IMockRequest = { headers: { authorization: 'Bearer sfk_key' } };
+
+      await expect(guard.canActivate(buildContext(request))).resolves.toBe(true);
+      expect(verifyApiKeyMock).toHaveBeenCalledWith('sfk_key');
+      expect(checkTokenMock).not.toHaveBeenCalled();
+      expect(request.user).toBe(owner);
+    });
+
+    it('refuses an invalid key with 401', async () => {
+      markHandler();
+      verifyApiKeyMock.mockResolvedValue(null);
+
+      const context = buildContext({ headers: { authorization: 'Bearer sfk_key' } });
+
+      await expect(guard.canActivate(context)).rejects.toThrow(new UnauthorizedException(API_KEY_INVALID_MESSAGE));
+    });
+
+    it('refuses a valid key on a handler not marked for keys with 403', async () => {
+      reflectorGet.mockReturnValue(undefined);
+      verifyApiKeyMock.mockResolvedValue(buildUserWithRoles([UserRoleId.SYSTEM_ADMIN]));
+
+      const context = buildContext({ headers: { authorization: 'Bearer sfk_key' } });
+
+      await expect(guard.canActivate(context)).rejects.toThrow(new ForbiddenException(API_KEY_NOT_ALLOWED_MESSAGE));
+    });
+
+    it('ignores the key mark on a controller', async () => {
+      reflectorGet.mockImplementation((key: string, target: unknown) =>
+        key === ALLOW_API_KEY_METADATA_KEY && isController(target) ? true : undefined
+      );
+      verifyApiKeyMock.mockResolvedValue(buildUserWithRoles([UserRoleId.SYSTEM_ADMIN]));
+
+      const context = buildContext({ headers: { authorization: 'Bearer sfk_key' } });
+
+      await expect(guard.canActivate(context)).rejects.toThrow(new ForbiddenException(API_KEY_NOT_ALLOWED_MESSAGE));
+    });
+
+    it("holds a key to its owner's roles", async () => {
+      markHandler();
+      verifyApiKeyMock.mockResolvedValue(buildUserWithRoles([UserRoleId.USER_ADMIN]));
+
+      const context = buildContext({ headers: { authorization: 'Bearer sfk_key' } });
+
+      await expect(guard.canActivate(context)).rejects.toThrow(new ForbiddenException(NOT_ALLOWED_MESSAGE));
     });
   });
 });

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Started by command-limit.sh, detached, before Claude runs the command:
-#   command-watchdog.sh <call id> <deadline ms> <Claude's pid> <background limit ms, 0 in the foreground>,
+#   command-watchdog.sh <call id> <deadline ms> <Claude's pid> <tool_use_id, or empty>,
 #   with the reason in SWARMFOUNDRY_REASON
 # Prints its pid, then waits for the command's shell to write the shell's pid to its fd 9. Exits once that shell is
 # gone, leaving what the command put in the background running. If the shell is still running at the deadline, counted
 # from that write, it freezes the shell and every process carrying the call's marker, writes the reason to the shell's
-# output and kills them.
+# output, kills them and writes the kill line, with its time, to Claude's stderr for the runner to log.
 
 set -u
 trap '' PIPE HUP INT TERM
@@ -13,7 +13,7 @@ trap '' PIPE HUP INT TERM
 id=$1
 deadline_ms=$2
 claude=$3
-background_limit_ms=$4
+tool_use_id=$4
 
 # Read for the shell's pid, and for naps without forking, so the watchdog stays out of the agent's `pgrep sleep`.
 exec 9<> <(:)
@@ -109,21 +109,14 @@ while shell_alive; do
   read -r -t 0.2 -u 9 _ || true
 done
 
-# Claude stops a background call's shell at its limit, so a shell gone from then on ran a call that hung.
-stopped_by_claude() {
-  now
-  ((background_limit_ms > 0 && now_ms >= start_ms + background_limit_ms - 1000))
-}
+# A call's timeout lies past its deadline, so a shell gone by then ran a call that ended on its own.
+shell_alive || exit 0
 
-if shell_alive; then
-  # The shell frozen first, so it neither runs a later line nor finishes while the marked processes are found.
-  kill -STOP "$shell" 2> /dev/null
+# The shell frozen first, so it neither runs a later line nor finishes while the marked processes are found.
+kill -STOP "$shell" 2> /dev/null
 
-  if ! shell_alive; then
-    kill -CONT "$shell" 2> /dev/null
-    stopped_by_claude || exit 0
-  fi
-elif ! stopped_by_claude; then
+if ! shell_alive; then
+  kill -CONT "$shell" 2> /dev/null
   exit 0
 fi
 
@@ -143,5 +136,11 @@ fi
 for pid in "${!stopped[@]}"; do
   kill -KILL "$pid" 2> /dev/null
 done
+
+# Claude's stderr is the container's, which the runner reads. SIGPIPE is ignored, so a closed pipe only fails the write.
+# The runner reads the kill line at the end of a line, so one appended to Claude's unfinished stderr still counts.
+now
+printf 'Swarmfoundry: the command limit stopped tool call %s at %s.\n' "$tool_use_id" "$now_ms" \
+  >> "/proc/$claude/fd/2" 2> /dev/null
 
 exit 0

@@ -3,12 +3,11 @@ import { StringDecoder } from 'node:string_decoder';
 
 import { RunTranscriptLine } from '@/core/task/entities/run-transcript-line.entity';
 
-import { COMMAND_STOPPED_LINE } from './command-limit.service';
+import { COMMAND_KILLED_LINE } from './command-limit.service';
 import { FoundryConfigService } from '@/core/foundry-config/foundry-config.service';
 import { TaskService } from '@/core/task/task.service';
 
 import { RunConfigError } from './run-config.error';
-import type { IAgentOutput } from './runner.types';
 import { agentSettingsSchema } from './schema/agent-settings';
 import {
   assistantSchema,
@@ -16,10 +15,9 @@ import {
   pluginInstallSchema,
   resultSchema,
   systemInitSchema,
-  toolResultSchema,
-  userSchema,
 } from './schema/stream-json';
-import type { IResolvedAgent } from '@/core/foundry-config/foundry-config.types';
+import type { IAgentOutput } from './types/runner.types';
+import type { IResolvedAgent } from '@/core/foundry-config/types/foundry-config.types';
 
 /** A line longer than this is stored in pieces, so output without newlines cannot grow without bound. */
 export const MAX_LINE_LENGTH = 4 * 1024 * 1024;
@@ -38,7 +36,8 @@ const LOGGED_COMMAND_LENGTH = 200;
 
 /**
  * Reads one run's output. Each stdout line is redacted, stored in order as a transcript line, and read for the
- * stream-json events the runner judges by. Stderr keeps only a redacted tail for the failure record.
+ * stream-json events the runner judges by. Stderr keeps only a redacted tail for the failure record, less the command
+ * limit's kill lines, which are logged instead.
  */
 @Injectable()
 export class AgentOutputService {
@@ -50,10 +49,12 @@ export class AgentOutputService {
   ) {}
 
   /** Throws when the agent's settings name `enabledPlugins` in a shape Claude would not read either. */
-  create(runId: number, agent: IResolvedAgent, storedLineCount = 0): IAgentOutput {
+  create(taskId: number, runId: number, agent: IResolvedAgent, storedLineCount = 0): IAgentOutput {
     return {
+      taskId,
       runId,
       storedLineCount,
+      readSince: Date.now(),
       extraSecrets: [agent.token],
       enabledPlugins: this.enabledPlugins(agent),
 
@@ -200,9 +201,26 @@ export class AgentOutputService {
     this.readEvent(output, text, line);
   }
 
+  /** Logs a kill line and keeps it out of the tail. Claude's unfinished stderr the watchdog appended it to stays. */
   private readStderrLine(output: IAgentOutput, raw: string): void {
-    const line = this.redact(output, raw);
+    const killed = COMMAND_KILLED_LINE.exec(raw);
 
+    if (killed === null) {
+      this.pushStderrTail(output, this.redact(output, raw));
+
+      return;
+    }
+
+    const before = raw.slice(0, killed.index);
+
+    if (before !== '') {
+      this.pushStderrTail(output, this.redact(output, before));
+    }
+
+    this.logKill(output, killed[1], Number(killed[2]));
+  }
+
+  private pushStderrTail(output: IAgentOutput, line: string): void {
     output.stderrTail.push(line.slice(0, STDERR_LINE_MAX_LENGTH));
 
     if (output.stderrTail.length > STDERR_TAIL_LINES) {
@@ -253,16 +271,6 @@ export class AgentOutputService {
       return;
     }
 
-    const user = userSchema.safeParse(event);
-
-    if (user.success) {
-      for (const block of user.data.message.content) {
-        this.readToolResult(output, block);
-      }
-
-      return;
-    }
-
     const result = resultSchema.safeParse(event);
 
     if (result.success) {
@@ -280,23 +288,19 @@ export class AgentOutputService {
     }
   }
 
-  /** Logs a Bash call the command limit stopped, once: a reattach replays lines already stored. */
-  private readToolResult(output: IAgentOutput, block: unknown): void {
-    const result = toolResultSchema.safeParse(block);
-
-    if (!result.success) {
-      return;
-    }
-
-    const { tool_use_id: toolUseId, content } = result.data;
-    const command = output.bashCommands.get(toolUseId);
+  /**
+   * Logs a Bash call the command limit stopped. A reattach replays stderr from the start, so a kill from before reading
+   * began is skipped: logged already, or made while the orchestrator was down. The container shares the host's clock.
+   */
+  private logKill(output: IAgentOutput, toolUseId: string, killedAt: number): void {
+    const command = output.bashCommands.get(toolUseId) ?? null;
 
     output.bashCommands.delete(toolUseId);
 
-    if (command !== undefined && COMMAND_STOPPED_LINE.test(content) && output.lineCount > output.storedLineCount) {
+    if (killedAt >= output.readSince) {
       this.logger.warn(
-        { runId: output.runId, toolUseId, command },
-        'readToolResult(): The command limit stopped an agent command'
+        { taskId: output.taskId, runId: output.runId, toolUseId: this.redact(output, toolUseId), command },
+        'logKill(): The command limit stopped an agent command'
       );
     }
   }

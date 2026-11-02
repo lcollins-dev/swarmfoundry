@@ -6,16 +6,20 @@ import { FoundryConfigService } from '@/core/foundry-config/foundry-config.servi
 
 import { errorText, GitLabApiError } from './gitlab-api.error';
 import { WATERMARK_OVERLAP_MS } from './gitlab-polling.constants';
-import type { IIssueProject, IRelatedIssue, SourceEventHandler } from './issue-source.types';
 import type { IGitLabMergeRequest, IGitLabRelatedIssue } from './schema/gitlab';
-import type { ISourceConfig, MergeRequestEventKind } from '@/core/foundry-config/foundry-config.types';
+import type { IIssueProject, IRelatedIssue, SourceEventHandler } from './types/issue-source.types';
+import type { ISourceConfig, MergeRequestEventKind } from '@/core/foundry-config/types/foundry-config.types';
 
 export const MERGE_REQUEST_OVERLAP_MS = WATERMARK_OVERLAP_MS;
 
 /** An event failing this often logs at `error` level, but is still retried, since a merge happens only once. */
 export const MAX_MERGE_REQUEST_ATTEMPTS = 3;
 
-const TITLE_ISSUE_PATTERN = /\(#(\d+)\)\s*$/;
+/** A same-project `#<iid>`: a character that can end a project path before the `#` makes it another project's. */
+const TITLE_ISSUE_PATTERN = /(?<![\w.-])#(\d+)(?!\w)/g;
+
+/** What may follow the `#<iid>` that ends a title: closing brackets, punctuation and whitespace. */
+const TITLE_END_PATTERN = /^[\s)\]}>.,;:!?'"]*$/;
 
 interface IPendingEvent {
   mergeRequest: IGitLabMergeRequest;
@@ -319,8 +323,8 @@ export class GitLabMergeRequestSourceService {
   }
 
   /**
-   * The issue the title's trailing `(#<iid>)` names, read from the related issues when it is among them. Without one, the
-   * related issue in the merge request's own project when exactly one relates, since a second may only be mentioned.
+   * The issue the title names, read from the related issues when it is among them. Without one, the related issue in
+   * the merge request's own project when exactly one relates, since a second may only be mentioned.
    */
   private async relatedIssueOf(
     source: ISourceConfig,
@@ -328,8 +332,7 @@ export class GitLabMergeRequestSourceService {
     mergeRequest: IGitLabMergeRequest,
     signal: AbortSignal
   ): Promise<IRelatedIssue | null> {
-    const titled = TITLE_ISSUE_PATTERN.exec(mergeRequest.title)?.[1];
-    const titledIid = titled === undefined ? null : Number(titled);
+    const titledIid = this.titledIidOf(mergeRequest.title);
 
     const related = (await this.readRelatedIssues(source, project, mergeRequest, signal)).filter(
       issue => issue.project_id === project.id
@@ -348,6 +351,24 @@ export class GitLabMergeRequestSourceService {
     const issue = await this.refusedAsNone(() => this.gitlabApiService.getIssue(source, project.id, titledIid, signal));
 
     return issue === null ? null : { iid: issue.iid, title: issue.title, url: issue.web_url };
+  }
+
+  /** The title's only `#<iid>`, however often it repeats, or else the one that ends it. */
+  private titledIidOf(title: string): number | null {
+    const references = [...title.matchAll(TITLE_ISSUE_PATTERN)];
+    const iids = new Set(references.map(reference => Number(reference[1])));
+
+    if (iids.size === 1) {
+      return [...iids][0];
+    }
+
+    const last = references.at(-1);
+
+    if (last === undefined || !TITLE_END_PATTERN.test(title.slice(last.index + last[0].length))) {
+      return null;
+    }
+
+    return Number(last[1]);
   }
 
   private onlyOf<T>(items: readonly T[]): T | null {

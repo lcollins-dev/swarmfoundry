@@ -11,15 +11,18 @@ import { join } from 'path';
 
 import { ConfigService } from '@/config/config.service';
 
-interface IWelcomeValues {
+interface IPasswordLinkValues {
   name: string;
-  signInUrl: string;
+  link: string;
+  /** How long the link works, in words, such as `7 days`. */
+  lifetime: string;
 }
 
-type EmailTemplateValues = IWelcomeValues;
+type EmailTemplateValues = IPasswordLinkValues;
 
 export enum EmailTemplate {
-  WELCOME = 'welcome.handlebars',
+  INVITE = 'invite.handlebars',
+  PASSWORD_RESET = 'password-reset.handlebars',
 }
 
 const SENDER_NAME = 'Swarmfoundry';

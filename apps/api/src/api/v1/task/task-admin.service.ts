@@ -1,21 +1,20 @@
 import { Injectable } from '@nestjs/common';
 
 import {
-  ListTaskDto,
   RunDto,
   TaskDto,
   TaskListQueryDto,
   TaskListResponseDto,
+  TranscriptDirection,
   TranscriptQueryDto,
   TranscriptResponseDto,
 } from '@libs/dto';
 
-import { Run } from '@/core/task/entities/run.entity';
-
 import { ConfigService } from '@/config/config.service';
-import { TaskReadService, type ITaskSummary } from '@/core/task/task-read.service';
+import { TaskReadService } from '@/core/task/task-read.service';
 
-import { taskKindOf } from '@/core/task/task-kind';
+import { toListTaskDto } from './utils/list-task.util';
+import { toRunDto } from './utils/run.util';
 
 /** A page reads whole lines until it holds this many events. */
 export const TRANSCRIPT_PAGE_EVENTS = 200;
@@ -40,7 +39,7 @@ export class TaskAdminService {
     );
 
     return {
-      taskList: summaries.map(summary => this.toListTask(summary)),
+      taskList: summaries.map(summary => toListTaskDto(summary)),
       pages: Math.ceil(total / pageSize),
       total,
     };
@@ -51,7 +50,7 @@ export class TaskAdminService {
     const { task } = summary;
 
     return {
-      ...this.toListTask(summary),
+      ...toListTaskDto(summary),
       matchedIssue:
         task.issueLabels === null
           ? null
@@ -61,91 +60,25 @@ export class TaskAdminService {
           ? null
           : { kind: task.changeKind, date: task.changeDate, actor: task.changeActor },
       cron: task.cron,
-      runs: (task.runs ?? []).map(run => this.toRun(run)),
+      runs: (task.runs ?? []).map(run => toRunDto(run)),
     };
   }
 
   async getRun(runId: number): Promise<RunDto> {
-    return this.toRun(await this.taskReadService.findRunWithThrow(runId));
+    return toRunDto(await this.taskReadService.findRunWithThrow(runId));
   }
 
-  async getTranscript(runId: number, query: TranscriptQueryDto): Promise<TranscriptResponseDto> {
-    return this.taskReadService.readTranscript(runId, {
-      fromLine: query.fromLine,
-      types: query.types,
-      eventLimit: TRANSCRIPT_PAGE_EVENTS,
-      lineLimit: TRANSCRIPT_PAGE_LINES,
-    });
-  }
+  async getTranscript(
+    runId: number,
+    query: TranscriptQueryDto,
+    eventLimit = TRANSCRIPT_PAGE_EVENTS
+  ): Promise<TranscriptResponseDto> {
+    const limits = { types: query.types, eventLimit, lineLimit: TRANSCRIPT_PAGE_LINES };
 
-  private toListTask({ task, totals }: ITaskSummary): ListTaskDto {
-    return {
-      id: task.id,
-      kind: taskKindOf(task),
-      triggerName: task.triggerName,
-      sourceName: task.sourceName,
-      projectPath: task.projectPath,
-      projectUrl: task.projectUrl,
-      issue:
-        task.issueIid === null || task.issueTitle === null || task.issueUrl === null
-          ? null
-          : { iid: task.issueIid, title: task.issueTitle, url: task.issueUrl },
-      mergeRequest:
-        task.mergeRequestIid === null ||
-        task.mergeRequestEvent === null ||
-        task.mergeRequestTitle === null ||
-        task.mergeRequestUrl === null ||
-        task.sourceBranch === null ||
-        task.targetBranch === null
-          ? null
-          : {
-              iid: task.mergeRequestIid,
-              event: task.mergeRequestEvent,
-              title: task.mergeRequestTitle,
-              url: task.mergeRequestUrl,
-              sourceBranch: task.sourceBranch,
-              targetBranch: task.targetBranch,
-            },
-      fireTime: task.fireTime,
-      status: task.status,
-      list: task.list,
-      step: task.step,
-      runCount: totals.runCount,
-      totalTokens: totals.totalTokens,
-      costUsd: totals.costUsd,
-      configSha: task.config?.sha ?? null,
-      queuedDate: task.queuedDate,
-      startDate: totals.startDate,
-      endDate: task.endDate,
-      notBeforeDate: task.notBeforeDate,
-      cancelReason: task.cancelReason,
-    };
-  }
+    if (query.direction === TranscriptDirection.BACKWARD) {
+      return this.taskReadService.readTranscriptBefore(runId, { ...limits, beforeLine: query.beforeLine ?? null });
+    }
 
-  private toRun(run: Run): RunDto {
-    return {
-      id: run.id,
-      taskId: run.taskId,
-      list: run.list,
-      step: run.step,
-      number: run.number,
-      outcome: run.outcome,
-      endReason: run.endReason,
-      exitCode: run.exitCode,
-      configSha: run.config?.sha ?? null,
-      startDate: run.startDate,
-      endDate: run.endDate,
-      error: run.error,
-      agent:
-        run.agentName === null || run.agentModel === null || run.agentAuth === null
-          ? null
-          : { name: run.agentName, model: run.agentModel, auth: run.agentAuth },
-      turns: run.turns,
-      inputTokens: run.inputTokens,
-      outputTokens: run.outputTokens,
-      cacheReadTokens: run.cacheReadTokens,
-      cacheWriteTokens: run.cacheWriteTokens,
-      costUsd: run.costUsd,
-    };
+    return this.taskReadService.readTranscript(runId, { ...limits, fromLine: query.fromLine ?? 1 });
   }
 }

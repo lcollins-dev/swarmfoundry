@@ -24,7 +24,7 @@
 
     <span v-else></span>
 
-    <div v-if="expanded" class="col-span-full -mx-4 -mb-3 cursor-text border-t border-divider" @click.stop>
+    <div v-if="expanded" class="col-span-full -mx-6 -mb-3 cursor-text border-t border-divider" @click.stop>
       <ui-code block tone="error" data-testid="job-run-error">{{ props.batchJobRun.error }}</ui-code>
     </div>
   </ui-table-row>

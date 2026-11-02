@@ -13,9 +13,9 @@ import { StepExecutorService } from '@/core/actions/step-executor.service';
 import type { FoundryConfigService } from '@/core/foundry-config/foundry-config.service';
 import type { TaskService } from '@/core/task/task.service';
 
-import type { IAgentRunner } from '@/core/actions/actions.types';
-import type { ITriggerConfig } from '@/core/foundry-config/foundry-config.types';
-import { StepList, TaskStatus, type IRunningTask } from '@/core/task/task.types';
+import type { IAgentRunner } from '@/core/actions/types/actions.types';
+import type { ITriggerConfig } from '@/core/foundry-config/types/foundry-config.types';
+import { StepList, TaskStatus, type IRunningTask } from '@/core/task/types/task.types';
 
 const CONFIG_A = 11;
 const CONFIG_B = 12;

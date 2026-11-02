@@ -4,7 +4,7 @@ import { IsNull, Repository } from 'typeorm';
 
 import { ConfigRevision } from './entities/config-revision.entity';
 
-import { ConfigRevisionStatus, type IConfigIssue } from './foundry-config.types';
+import { ConfigRevisionStatus, type IConfigIssue } from './types/foundry-config.types';
 
 @Injectable()
 export class ConfigRevisionService {
@@ -44,6 +44,10 @@ export class ConfigRevisionService {
   /** Keeps the first time. */
   async recordCurrent(id: number): Promise<void> {
     await this.configRevisionRepository.update({ id, currentDate: IsNull() }, { currentDate: new Date() });
+  }
+
+  findBySha(sha: string): Promise<ConfigRevision | null> {
+    return this.configRevisionRepository.findOneBy({ sha });
   }
 
   async findSha(id: number): Promise<string | null> {

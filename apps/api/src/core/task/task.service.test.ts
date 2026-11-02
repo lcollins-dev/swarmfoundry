@@ -7,9 +7,9 @@ import { Task } from './entities/task.entity';
 
 import { TaskService } from './task.service';
 
-import { DeploymentFault, RunEndReason, RunOutcome, StepList, TaskStatus } from './task.types';
-import type { ITriggerConfig } from '@/core/foundry-config/foundry-config.types';
-import type { IIssueChange, IIssueEvent, IMergeRequestEvent } from '@/core/issue-source/issue-source.types';
+import { DeploymentFault, RunEndReason, RunOutcome, StepList, TaskStatus } from './types/task.types';
+import type { ITriggerConfig } from '@/core/foundry-config/types/foundry-config.types';
+import type { IIssueChange, IIssueEvent, IMergeRequestEvent } from '@/core/issue-source/types/issue-source.types';
 
 vi.mock('typeorm-transactional', () => {
   const transactionalDecorator = () => () => undefined;

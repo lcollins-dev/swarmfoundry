@@ -1,7 +1,13 @@
 import { Injectable } from '@nestjs/common';
 
 import { issueAt } from './foundry-config.error';
-import type { IConfigIssue, ISubstitutedValue, ISubstitution, KeyPath, VariableLookup } from './foundry-config.types';
+import type {
+  IConfigIssue,
+  ISubstitutedValue,
+  ISubstitution,
+  KeyPath,
+  VariableLookup,
+} from './types/foundry-config.types';
 
 const REFERENCE_PATTERN = /\$\{([^}]*)\}/g;
 const VARIABLE_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;

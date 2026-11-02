@@ -21,7 +21,7 @@ import type {
   IRenderedPrompts,
   ISourceConfig,
   ITriggerConfig,
-} from './foundry-config.types';
+} from './types/foundry-config.types';
 
 export const DEFAULT_CONFIG_FILE = 'swarmfoundry.yaml';
 
@@ -97,6 +97,16 @@ export class FoundryConfigService implements OnModuleInit, BeforeApplicationShut
   /** The running revision's `config_revision` id, or null when the config loads from a local file. */
   get revisionId(): number | null {
     return this.loadedRevision?.id ?? null;
+  }
+
+  /** The running config file's absolute path, or null when none was found. Inside a deleted checkout for a revision. */
+  get path(): string | null {
+    return this.current.config.path;
+  }
+
+  /** The running config file and each file it references, as read at load, by absolute path. */
+  get files(): ReadonlyMap<string, string> {
+    return this.current.files;
   }
 
   get sources(): readonly ISourceConfig[] {
@@ -194,6 +204,14 @@ export class FoundryConfigService implements OnModuleInit, BeforeApplicationShut
     return this.secretRedactionService.apply(text, this.patternsWith(extraSecrets));
   }
 
+  /**
+   * Masks text the config writes for a reader: every secret the config holds and `extraSecrets`, then each credential
+   * by its shape, such as a URL password, an auth header or a prefixed token, which no `${VAR}` collected.
+   */
+  maskWritten(text: string, extraSecrets: readonly string[] = []): string {
+    return this.secretRedactionService.maskCredentials(this.redactText(text, extraSecrets));
+  }
+
   /** Masks every `token` field and every secret the config holds, for logging. */
   redact(value: unknown): unknown {
     return this.secretRedactionService.redact(value, this.secrets);
@@ -212,7 +230,11 @@ export class FoundryConfigService implements OnModuleInit, BeforeApplicationShut
     const defaultPath = resolve(DEFAULT_CONFIG_FILE);
 
     if (configured === '' && !existsSync(defaultPath)) {
-      this.loaded = { config: { path: null, sources: [], environments: [], triggers: [] }, secrets: new Set() };
+      this.loaded = {
+        config: { path: null, sources: [], environments: [], triggers: [] },
+        secrets: new Set(),
+        files: new Map(),
+      };
 
       this.logger.warn(
         { path: defaultPath },

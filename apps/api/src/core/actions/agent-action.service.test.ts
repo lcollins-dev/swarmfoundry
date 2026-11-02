@@ -7,9 +7,9 @@ import { AgentActionService, ASSISTANT_LINES_READ } from './agent-action.service
 import type { FoundryConfigService } from '@/core/foundry-config/foundry-config.service';
 import type { TaskService } from '@/core/task/task.service';
 
-import type { IAgentRunner, IAgentRunRequest } from './actions.types';
-import type { IAgentStepConfig } from '@/core/foundry-config/foundry-config.types';
-import { DeploymentFault, RunOutcome, StepList, type IRunReport } from '@/core/task/task.types';
+import type { IAgentRunner, IAgentRunRequest } from './types/actions.types';
+import type { IAgentStepConfig } from '@/core/foundry-config/types/foundry-config.types';
+import { DeploymentFault, RunOutcome, StepList, type IRunReport } from '@/core/task/types/task.types';
 
 const result = ({ subtype = 'success', isError = false, text = 'Done' } = {}) =>
   `{"type":"result","subtype":"${subtype}","is_error":${isError},"result":"${text}"}`;

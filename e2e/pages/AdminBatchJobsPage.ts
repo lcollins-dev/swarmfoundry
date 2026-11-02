@@ -14,6 +14,6 @@ export class AdminBatchJobsPage {
   }
 
   async goto(): Promise<void> {
-    await this.page.goto(webRoute('/admin/batch-jobs'));
+    await this.page.goto(webRoute('/batch-jobs'));
   }
 }

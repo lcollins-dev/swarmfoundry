@@ -12,8 +12,8 @@ import {
 import type { SourceWatermarkService } from './source-watermark.service';
 import type { FoundryConfigService } from '@/core/foundry-config/foundry-config.service';
 
-import type { IIssueProject, IMergeRequestEvent, ISourceEvent } from './issue-source.types';
-import type { ISourceConfig, MergeRequestEventKind } from '@/core/foundry-config/foundry-config.types';
+import type { IIssueProject, IMergeRequestEvent, ISourceEvent } from './types/issue-source.types';
+import type { ISourceConfig, MergeRequestEventKind } from '@/core/foundry-config/types/foundry-config.types';
 
 const TOKEN = 'glpat-orchestrator-secret';
 
@@ -24,6 +24,7 @@ const config: ISourceConfig = {
   token: TOKEN,
   pollInterval: 60_000,
   projects: ['group/project'],
+  written: { url: 'https://gitlab.test/' },
 };
 
 const BOTH: ReadonlySet<MergeRequestEventKind> = new Set(['opened', 'merged']);
@@ -632,8 +633,45 @@ describe('GitLabMergeRequestSourceService', () => {
       expect(events.map(event => event.relatedIssue)).toEqual([null]);
     });
 
+    it.each([
+      ['Fix login #4', 4],
+      ['#4: fix login', 4],
+      ['Fix #4 for good, #4 for real', 4],
+      ['Fix it (#3), as #3 asks', 3],
+      ['Fix login [#4].', 4],
+      ['Revert #4 fix [#5]', 5],
+      ['Revert #4 fix #5', 5],
+      ['Revert #4 (fix #5)', 5],
+      ['Revert #4 fix #5.', 5],
+      ['Fix #3/#4', 4],
+      ['Fix #4 from project#5, see !5', 4],
+      ['Fix #4 and #5 for good', null],
+      ['Fix project#4', null],
+      ['Fix my-project#4 and sub.project#4', null],
+      ['Fix !4', null],
+      ['Fix #4a', null],
+    ])('reads the issue the title %j names as %j', async (title, iid) => {
+      gitlab.mergeRequests = [merged(title)];
+      gitlab.issues.set(3, 'Three');
+      gitlab.issues.set(4, 'Four');
+      gitlab.issues.set(5, 'Five');
+
+      await source.poll(config, project, BOTH, emit, signal);
+
+      expect(events[0].relatedIssue?.iid ?? null).toBe(iid);
+    });
+
+    it('takes the one related issue when the title names several and none ends it', async () => {
+      gitlab.mergeRequests = [merged('Fix #4 and #5 for good')];
+      gitlab.related.set(2, [{ iid: 41, project_id: 7, title: 'Only' }]);
+
+      await source.poll(config, project, BOTH, emit, signal);
+
+      expect(events[0].relatedIssue?.iid).toBe(41);
+    });
+
     it('emits with no issue when the issue its title names does not exist, or it names none', async () => {
-      gitlab.mergeRequests = [merged('Fix it (#45)'), { ...merged('Fix it (#45) for good'), iid: 3 }];
+      gitlab.mergeRequests = [merged('Fix it (#45)'), { ...merged('Fix #4 and #5 for good'), iid: 3 }];
 
       await source.poll(config, project, BOTH, emit, signal);
 

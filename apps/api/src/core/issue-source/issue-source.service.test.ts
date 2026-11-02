@@ -9,8 +9,8 @@ import type { SourceWatermarkService } from './source-watermark.service';
 import type { FoundryConfigService } from '@/core/foundry-config/foundry-config.service';
 
 import { WATERMARK_OVERLAP_MS } from './gitlab-polling.constants';
-import type { IIssueEvent } from './issue-source.types';
-import type { ISourceConfig } from '@/core/foundry-config/foundry-config.types';
+import type { IIssueEvent } from './types/issue-source.types';
+import type { ISourceConfig } from '@/core/foundry-config/types/foundry-config.types';
 
 const TOKEN = 'glpat-orchestrator-secret';
 const POLL_INTERVAL_MS = 30_000;
@@ -23,6 +23,7 @@ const source: ISourceConfig = {
   token: TOKEN,
   pollInterval: POLL_INTERVAL_MS,
   projects: ['group/project'],
+  written: { url: 'https://gitlab.test' },
 };
 
 interface IFakeConfig {
@@ -42,6 +43,7 @@ const foundryConfigWith = (config: IFakeConfig) =>
       return () => config.listeners.delete(listener);
     },
     redact: (value: unknown) => (typeof value === 'string' ? value.replaceAll(TOKEN, '[redacted]') : value),
+    redactText: (text: string) => text.replaceAll(TOKEN, '[redacted]'),
   }) as unknown as FoundryConfigService;
 
 const mergeRequestSource = {
@@ -203,6 +205,71 @@ describe('IssueSourceService', () => {
     await stop();
   });
 
+  it('records each poll, naming the projects that failed, and when the next one is due', async () => {
+    const service = serviceWith([source]);
+    issueStatus = 500;
+
+    expect(service.pollStatus()).toEqual([{ source, lastPoll: null, nextPollDate: null }]);
+
+    const stop = service.start(() => Promise.resolve());
+    await vi.advanceTimersByTimeAsync(0);
+
+    const [failed] = service.pollStatus();
+
+    expect(failed.lastPoll).toEqual({
+      endDate: new Date(Date.now()),
+      failedProjects: [{ project: 'group/project', error: expect.stringContaining('500') as string }],
+      error: null,
+    });
+    expect(failed.nextPollDate).toEqual(new Date(Date.now() + POLL_INTERVAL_MS));
+
+    issueStatus = 200;
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+    expect(service.pollStatus()[0].lastPoll?.failedProjects).toEqual([]);
+    await stop();
+  });
+
+  it('has no next poll due while a poll runs', async () => {
+    const service = serviceWith([source]);
+    let release: () => void = () => undefined;
+
+    const stop = service.start(
+      () =>
+        new Promise<void>(resolve => {
+          release = resolve;
+        })
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(service.pollStatus()[0].nextPollDate).toBeNull();
+
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(service.pollStatus()[0].nextPollDate).toEqual(new Date(Date.now() + POLL_INTERVAL_MS));
+    await stop();
+  });
+
+  it('records a poll that fails outright over the last one that succeeded, its error masked', async () => {
+    const service = serviceWith([source]);
+
+    const stop = service.start(() => Promise.resolve());
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(service.pollStatus()[0].lastPoll?.error).toBeNull();
+
+    vi.spyOn(GitLabSourceService.prototype, 'poll').mockRejectedValueOnce(new Error(`Refused ${TOKEN}`));
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+    expect(service.pollStatus()[0].lastPoll).toEqual({
+      endDate: new Date(Date.now()),
+      failedProjects: [],
+      error: expect.stringContaining('Refused [redacted]') as string,
+    });
+    await stop();
+  });
+
   it('waits on shutdown for a handler in flight, then polls no more', async () => {
     const service = serviceWith([source]);
     let release: () => void = () => undefined;
@@ -277,6 +344,21 @@ describe('IssueSourceService', () => {
       await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS - 1);
 
       expect(fetchMock).not.toHaveBeenCalled();
+      await stop();
+    });
+
+    it('leaves a source on its schedule when a revision only rewrites its url as a ${VAR} of the same value', async () => {
+      const service = serviceWith([source]);
+
+      const stop = service.start(() => Promise.resolve());
+      await vi.advanceTimersByTimeAsync(0);
+
+      fetchMock.mockClear();
+      swapTo([{ ...source, written: { url: '${GITLAB_URL}' } }]);
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS - 1);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(logged.flat()).not.toContain('followSwap(): The source changed, so its polling restarts');
       await stop();
     });
 

@@ -1,7 +1,7 @@
 <template>
   <div class="mx-auto mt-16 max-w-sm">
     <ui-result :icon="IconSearchOff" title="Page not found">
-      There's nothing here. Check the link, or head back home.
+      This page could not be found. Check the link or return home.
 
       <template #actions>
         <ui-link to="/" unstyled>

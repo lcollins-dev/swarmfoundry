@@ -9,7 +9,7 @@ test.use({ storageState: LOGGED_OUT_STORAGE_STATE });
 
 test.describe('sign in', () => {
   test('redirects a protected route to sign-in when unauthenticated', async ({ page }) => {
-    await page.goto(webRoute('/dashboard'));
+    await page.goto(webRoute('/overview'));
 
     await expect(page).toHaveURL(/\/sign-in/);
   });

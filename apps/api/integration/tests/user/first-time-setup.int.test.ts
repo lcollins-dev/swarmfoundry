@@ -6,6 +6,7 @@ import { UserRoleId } from '@libs/dto';
 
 import { SETUP_REQUIRED_MESSAGE } from '@/api/v1/user/guards/auth.guard';
 
+import { getBatchJobList } from '../../clients/batch-job.client';
 import { getNotificationList } from '../../clients/notification.client';
 import { getProfile, getUserStats, login, logout } from '../../clients/user.client';
 import { bootstrapApp } from '../../setup';
@@ -43,7 +44,7 @@ describe('First-time setup (integration)', () => {
     const refusals = [
       () => getUserStats(app, token),
       () => getNotificationList(app, token),
-      () => request(app.getHttpServer()).get('/api/v1/admin/sys-config').set(authHeaders(token)),
+      () => getBatchJobList(app, token),
     ];
 
     for (const refusal of refusals) {

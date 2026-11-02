@@ -59,6 +59,8 @@ export const ListTaskDto = z.object({
   list: z.enum(StepList),
   step: z.number(),
   runCount: z.number(),
+  /** The furthest index in `steps` a run reached, which for a failed task is the step that failed. Null before any did. */
+  furthestStep: z.number().nullable(),
   /** Every kind summed, cache reads and writes included. Null when no run recorded usage. */
   totalTokens: z.number().nullable(),
   /** API-equivalent for an `oauth` agent. Null when no run recorded a cost. */
@@ -145,9 +147,18 @@ export const TaskDto = ListTaskDto.extend({
 });
 export type TaskDto = z.infer<typeof TaskDto>;
 
-export const TranscriptQueryDto = z.object({
-  /** The first line to read. */
-  fromLine: wholeNumberParam(1, INT4_MAX).default(1),
+export enum TranscriptDirection {
+  FORWARD = 'forward',
+  /** The lines before `beforeLine`, nearest first, or the last lines stored when it is absent. */
+  BACKWARD = 'backward',
+}
+
+const transcriptQueryFields = z.object({
+  direction: enumValue(TranscriptDirection).default(TranscriptDirection.FORWARD),
+  /** The first line to read forward. The first line stored when absent. */
+  fromLine: wholeNumberParam(1, INT4_MAX).optional(),
+  /** The line to read backward from, which the page leaves out. */
+  beforeLine: wholeNumberParam(1, INT4_MAX).optional(),
   /** Comma separated. Every type when absent. */
   types: z
     .string()
@@ -155,6 +166,11 @@ export const TranscriptQueryDto = z.object({
     .pipe(z.array(enumValue(TranscriptEventType)))
     .optional(),
 });
+
+export const TranscriptQueryDto = transcriptQueryFields.refine(
+  query => (query.direction === TranscriptDirection.FORWARD ? query.beforeLine : query.fromLine) === undefined,
+  { error: 'Give fromLine to read forward, or beforeLine to read backward.' }
+);
 export type TranscriptQueryDto = z.infer<typeof TranscriptQueryDto>;
 
 const transcriptEvent = <Type extends TranscriptEventType, Shape extends z.ZodRawShape>(type: Type, shape: Shape) =>
@@ -219,9 +235,31 @@ export type TranscriptEventDto = z.infer<typeof TranscriptEventDto>;
 export const TranscriptResponseDto = z.object({
   /** In line order. A page holds whole lines, so a line's events never split across pages. */
   events: z.array(TranscriptEventDto),
-  /** The line to read from next, past every line this page read. */
+  /** The first line the page covers. Read backward with it as `beforeLine` to go on. */
+  firstLine: z.number(),
+  /** Whether lines are stored before `firstLine`. */
+  hasEarlier: z.boolean(),
+  /** The line after every line the page covers. Read forward from it to go on. */
   nextLine: z.number(),
   /** Whether lines are stored from `nextLine` on. A running run may store more later. */
   hasMore: z.boolean(),
 });
 export type TranscriptResponseDto = z.infer<typeof TranscriptResponseDto>;
+
+export const TranscriptStreamQueryDto = transcriptQueryFields.pick({ types: true });
+export type TranscriptStreamQueryDto = z.infer<typeof TranscriptStreamQueryDto>;
+
+/** A stream's `Last-Event-ID`: the last line the client holds. It reads from the first line when absent. */
+export const TranscriptStreamLastLineDto = wholeNumberParam(0, INT4_MAX).optional();
+
+export const TranscriptStreamMessageDto = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('line'),
+    /** Also the message's SSE id. A line with no event the filter keeps sends no message. */
+    lineNumber: z.number(),
+    events: z.array(TranscriptEventDto),
+  }),
+  /** The run has been judged and every line it stored has been sent. The stream closes after it. */
+  z.object({ type: z.literal('end') }),
+]);
+export type TranscriptStreamMessageDto = z.infer<typeof TranscriptStreamMessageDto>;

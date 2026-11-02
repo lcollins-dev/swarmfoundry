@@ -10,7 +10,7 @@ import PageNotFound from '@/pages/PageNotFound.vue';
 
 import { loggedInRoutes } from './loggedin';
 import { loggedOutRoutes } from './loggedout';
-import { NOT_FOUND_ROUTE, authMiddleware } from './middleware/auth';
+import { HOME_PATH, NOT_FOUND_ROUTE, authMiddleware } from './middleware/auth';
 import { clearNotificationsErrorMiddleware } from './middleware/clear-notifications-errors';
 import { logMiddleware } from './middleware/log';
 
@@ -40,6 +40,10 @@ const routes: Readonly<RouteRecordRaw[]> = [
     return route;
   }),
   // Base
+  {
+    path: '/',
+    redirect: HOME_PATH,
+  },
   {
     path: '/error',
     component: Error,

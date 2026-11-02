@@ -3,9 +3,9 @@ import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique, 
 import { Task } from './task.entity';
 import { ConfigRevision } from '@/core/foundry-config/entities/config-revision.entity';
 
-import { DeploymentFault, RunEndReason, RunOutcome, StepList, type IRunAgent } from '../task.types';
+import { DeploymentFault, RunEndReason, RunOutcome, StepList, type IRunAgent } from '../types/task.types';
 import { ColumnNumericTransformer } from '@/common/transformers/ColumnNumericTransformer';
-import type { IResolvedAgent } from '@/core/foundry-config/foundry-config.types';
+import type { IResolvedAgent } from '@/core/foundry-config/types/foundry-config.types';
 
 @Entity()
 @Unique('UQ_run_task_id_list_step_number', ['taskId', 'list', 'step', 'number'])

@@ -61,7 +61,7 @@ export default defineConfig([
       'src/core/runner/schema/gitlab-user.ts',
       'src/core/runner/schema/stream-json.ts',
       'src/core/task/schema/stream-json.ts',
-      'src/core/task/*.test.ts',
+      'src/core/task/**/*.test.ts',
       'integration/tests/task/*.ts',
       'src/core/runner/git-identity.service.test.ts',
     ],

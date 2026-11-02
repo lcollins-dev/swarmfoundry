@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { isCronExpression } from '../cron-schedule';
+import { isCronExpression } from '../utils/cron-schedule.util';
 import { label, name, text, username } from './common';
 import { stepSchema } from './steps';
 

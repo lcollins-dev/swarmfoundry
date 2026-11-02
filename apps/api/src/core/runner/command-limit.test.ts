@@ -15,10 +15,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { COMMAND_LIMIT_SOURCE, COMMAND_STOPPED_LINE, COMMAND_WATCHDOG_SOURCE } from './command-limit.service';
+import { COMMAND_KILLED_LINE, COMMAND_LIMIT_SOURCE, COMMAND_WATCHDOG_SOURCE } from './command-limit.service';
 
 const REASON =
   'Swarmfoundry stopped this command, and every process it started, after 2s: its limit of 1s plus 1s grace.';
+const KILLED = /^Swarmfoundry: the command limit stopped tool call toolu_1 at \d+\.\n$/;
 
 const fixture = (name: string) => readFileSync(join(__dirname, 'fixtures', `claude-code-2.1.312.${name}`), 'utf8');
 
@@ -102,10 +103,10 @@ describe.runIf(process.platform === 'linux')('command-limit.sh', () => {
 
   const hook = (toolInput: unknown) => runHook(`{"tool_name":"Bash","tool_input":${JSON.stringify(toolInput)}}`);
 
-  /** The watchdog's reason, script, call id, deadline, Claude's pid and background limit, as the hook started it. */
+  /** The watchdog's reason, script, call id, deadline, Claude's pid and tool use id, as the hook started it. */
   const watchdog = () => {
-    const lines = readFileSync(join(bin, 'watchdog'), 'utf8').trimEnd().split('\n');
-    const [script, id, deadline, claude, backgroundLimit] = lines.slice(-5);
+    const lines = readFileSync(join(bin, 'watchdog'), 'utf8').replace(/\n$/, '').split('\n');
+    const [script, id, deadline, claude, toolUseId] = lines.slice(-5);
 
     return {
       reason: lines[0],
@@ -113,7 +114,7 @@ describe.runIf(process.platform === 'linux')('command-limit.sh', () => {
       id,
       deadlineMs: Number(deadline),
       claudePid: Number(claude),
-      backgroundLimitMs: Number(backgroundLimit),
+      toolUseId,
     };
   };
 
@@ -143,13 +144,11 @@ describe.runIf(process.platform === 'linux')('command-limit.sh', () => {
 
     expect(started.script).toBe(COMMAND_WATCHDOG_SOURCE);
     expect(started.deadlineMs).toBe(deadlineMs);
-    expect(started.backgroundLimitMs).toBe('run_in_background' in extraInput ? deadlineMs - 60_000 : 0);
     expect(started.claudePid).toBe(parentOfSession('self'));
     expect(started.reason).toBe(
       `Swarmfoundry stopped this command, and every process it started, after ${Math.floor(deadlineMs / 1000)}s: ` +
         `its limit of ${Math.floor(deadlineMs / 1000) - 60}s plus 60s grace.`
     );
-    expect(started.reason).toMatch(COMMAND_STOPPED_LINE);
   });
 
   const captured = fixture('hook-input.jsonl').trim().split('\n');
@@ -157,7 +156,7 @@ describe.runIf(process.platform === 'linux')('command-limit.sh', () => {
   it.each([
     [0, 180_000, { timeout: 190_000 }],
     [1, 180_000, { timeout: 190_000 }],
-    [2, 960_000, { timeout: 900_000 }],
+    [2, 960_000, { timeout: 970_000 }],
   ])('marks call %i of those captured from Claude Code', (index, deadlineMs, extraInput) => {
     const line = captured[index] ?? '';
     const toolInput = (JSON.parse(line) as Record<string, { command: string }>).tool_input;
@@ -175,16 +174,28 @@ describe.runIf(process.platform === 'linux')('command-limit.sh', () => {
     [{}, 190_000],
     [{ timeout: 15_000 }, 85_000],
     [{ timeout: 900_000 }, 670_000],
-  ])("raises a foreground call's timeout past its kill, from %j", (input, timeoutMs) => {
+    [JSON.parse('{"run_in_background":true}'), 970_000],
+    [JSON.parse('{"run_in_background":true,"timeout":5000}'), 75_000],
+    [JSON.parse('{"run_in_background":true,"timeout":7200000}'), 670_000],
+  ])("raises the call's timeout past its kill, from %j", (input, timeoutMs) => {
     expect(hook({ command: 'make', ...input })?.timeout).toBe(timeoutMs);
   });
 
   it.each([
-    [{}, 900_000],
-    [{ timeout: 5000 }, 5000],
-    [{ timeout: 7_200_000 }, 600_000],
-  ])('gives a background call its limit as its timeout, from %j', (input, timeoutMs) => {
-    expect(hook({ command: 'make', ...JSON.parse('{"run_in_background":true}'), ...input })?.timeout).toBe(timeoutMs);
+    ['toolu_01Vz7cmp4URWqR3dnm82Sh4m', 'toolu_01Vz7cmp4URWqR3dnm82Sh4m'],
+    ['toolu_bdrk_01Vz7cmp4URWqR3dnm82Sh4m', 'toolu_bdrk_01Vz7cmp4URWqR3dnm82Sh4m'],
+    ['toolu_vrtx_01Vz7cmp4URWqR3dnm82Sh4m', 'toolu_vrtx_01Vz7cmp4URWqR3dnm82Sh4m'],
+    ['toolu_1. x', ''],
+    ['call-1', ''],
+    ['glpat-example', ''],
+    [42, ''],
+    [undefined, ''],
+  ])('hands the watchdog the tool use id %j as %j', (toolUseId, expected) => {
+    const field = toolUseId === undefined ? '' : `,"tool_use_id":${JSON.stringify(toolUseId)}`;
+
+    runHook(`{"tool_name":"Bash","tool_input":{"command":"make"}${field}}`);
+
+    expect(watchdog().toolUseId).toBe(expected);
   });
 
   it.each([
@@ -229,33 +240,54 @@ describe.runIf(process.platform === 'linux')('command-limit.sh', () => {
     expect(Date.now() - started).toBeLessThan(7000);
   });
 
-  it('returns at once, and its watchdog stops the marked command at the deadline', async () => {
+  it('returns at once, and its watchdog stops the marked command at the deadline and reports it to Claude', async () => {
+    const claudeStderr = join(bin, 'claude-stderr');
+    const fd = openSync(claudeStderr, 'a');
+    const input = `{"tool_input":{"command":"echo ready; bash -c 'trap \\"\\" TERM; sleep 300'"},"tool_use_id":"toolu_1"}`;
     const started = Date.now();
-    const output = execFileSync(
+
+    // Claude, as the parent of the hook's session, which stays for the watchdog to wait on.
+    const claude = spawn(
       '/usr/bin/env',
       [
         '-i',
         `PATH=${process.env.PATH ?? ''}`,
-        'bash',
-        '--norc',
-        '--noprofile',
+        'sh',
+        '-c',
+        'setsid bash --norc --noprofile "$0" 1000 1000 1000 1000; exec sleep 30',
         COMMAND_LIMIT_SOURCE,
-        '1000',
-        '1000',
-        '1000',
-        '1000',
       ],
-      { input: `{"tool_input":{"command":"echo ready; bash -c 'trap \\"\\" TERM; sleep 300'"}}`, encoding: 'utf8' }
+      { stdio: ['pipe', 'pipe', fd] }
     );
 
-    expect(Date.now() - started).toBeLessThan(1000);
+    closeSync(fd);
+    claude.stdin!.end(input);
 
-    const command = (JSON.parse(output) as { hookSpecificOutput: { updatedInput: { command: string } } })
-      .hookSpecificOutput.updatedInput.command;
-    const shell = startShell(command, join(bin, 'output'), join(bin, 'cwd'));
+    try {
+      const output = await new Promise<string>(resolve => {
+        let text = '';
 
-    expect(await new Promise(resolve => shell.on('exit', (_code, signal) => resolve(signal)))).toBe('SIGKILL');
-    expect(readFileSync(join(bin, 'output'), 'utf8')).toBe(`ready\n\n${REASON}\n`);
+        claude.stdout!.on('data', (chunk: Buffer) => {
+          text += chunk.toString();
+
+          if (text.endsWith('\n')) {
+            resolve(text);
+          }
+        });
+      });
+
+      expect(Date.now() - started).toBeLessThan(1000);
+
+      const command = (JSON.parse(output) as { hookSpecificOutput: { updatedInput: { command: string } } })
+        .hookSpecificOutput.updatedInput.command;
+      const shell = startShell(command, join(bin, 'output'), join(bin, 'cwd'));
+
+      expect(await new Promise(resolve => shell.on('exit', (_code, signal) => resolve(signal)))).toBe('SIGKILL');
+      expect(readFileSync(join(bin, 'output'), 'utf8')).toBe(`ready\n\n${REASON}\n`);
+      await vi.waitFor(() => expect(readFileSync(claudeStderr, 'utf8')).toMatch(KILLED));
+    } finally {
+      claude.kill('SIGKILL');
+    }
   });
 });
 
@@ -300,20 +332,24 @@ describe.runIf(process.platform === 'linux')('command-watchdog.sh', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  /** Starts a watchdog as the hook does, with this process as Claude, once it has printed its pid. */
-  const watch = async (deadlineMs: number, claudePid = process.pid, backgroundLimitMs = 0) => {
+  /** Claude's stderr, where the watchdog reports a kill. */
+  const claudeStderr = () => readFileSync(join(dir, 'claude-stderr'), 'utf8');
+
+  /** Starts a watchdog as the hook does, by default with a stand-in for Claude, once it has printed its pid. */
+  const watch = async (deadlineMs: number, claudePid?: number) => {
+    if (claudePid === undefined) {
+      const fd = openSync(join(dir, 'claude-stderr'), 'a');
+      const claude = spawn('sleep', ['300'], { stdio: ['ignore', 'ignore', fd] });
+
+      closeSync(fd);
+      spawned.push(claude);
+      claudePid = claude.pid ?? 0;
+    }
+
     const started = Date.now();
     const watchdog = spawn(
       'bash',
-      [
-        '--norc',
-        '--noprofile',
-        COMMAND_WATCHDOG_SOURCE,
-        id,
-        String(deadlineMs),
-        String(claudePid),
-        String(backgroundLimitMs),
-      ],
+      ['--norc', '--noprofile', COMMAND_WATCHDOG_SOURCE, id, String(deadlineMs), String(claudePid), 'toolu_1'],
       { env: { PATH: process.env.PATH, SWARMFOUNDRY_REASON: REASON }, stdio: ['ignore', 'pipe', 'ignore'] }
     );
 
@@ -363,6 +399,8 @@ describe.runIf(process.platform === 'linux')('command-watchdog.sh', () => {
     expect(await exited).toBe('SIGKILL');
     expect(await watchdog.exited).toBeGreaterThanOrEqual(1000);
     expect(readFileSync(join(dir, 'output'), 'utf8')).toBe(`ready\n\n${REASON}\n`);
+    expect(claudeStderr()).toMatch(KILLED);
+    expect(Number(COMMAND_KILLED_LINE.exec(claudeStderr().trim())?.[2])).toBeGreaterThan(Date.now() - 10_000);
     await vi.waitFor(() => expect(markedPids()).toEqual([]));
   });
 
@@ -440,6 +478,7 @@ describe.runIf(process.platform === 'linux')('command-watchdog.sh', () => {
 
     expect(await watchdog.exited).toBeLessThan(5000);
     expect(markedPids()).not.toEqual([]);
+    expect(claudeStderr()).toBe('');
   });
 
   it('kills what a hung call put in the background', async () => {
@@ -453,29 +492,17 @@ describe.runIf(process.platform === 'linux')('command-watchdog.sh', () => {
     await vi.waitFor(() => expect(markedPids()).toEqual([]));
   });
 
-  it('kills what a background call put in the background once Claude stops the call at its limit', async () => {
-    const watchdog = await watch(3000, process.pid, 1000);
-    const { shell } = await runCommand(
-      `setsid sleep 300 > /dev/null 2>&1 < /dev/null & echo ready; sleep 300`,
+  it('leaves what a call put in the background once it ends on its own just before the deadline', async () => {
+    const watchdog = await watch(3000);
+    const { exited } = await runCommand(
+      `setsid sleep 300 > /dev/null 2>&1 < /dev/null & echo ready; sleep 2.5`,
       watchdog.pid
     );
 
-    // As Claude stops a background call, by signalling the shell's process group.
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    process.kill(-(shell.pid ?? 0), 'SIGKILL');
-
+    expect(await exited).toBeNull();
     expect(await watchdog.exited).toBeLessThan(3000);
-    await vi.waitFor(() => expect(markedPids()).toEqual([]));
-  });
-
-  it('leaves what a background call put in the background once the call ends before its limit', async () => {
-    const watchdog = await watch(60_000, process.pid, 30_000);
-    const { exited } = await runCommand(`setsid sleep 300 > /dev/null 2>&1 < /dev/null & echo ready`, watchdog.pid);
-
-    await exited;
-
-    expect(await watchdog.exited).toBeLessThan(5000);
     expect(markedPids()).not.toEqual([]);
+    expect(claudeStderr()).toBe('');
   });
 
   it('leaves no marked process from a command that keeps forking', async () => {

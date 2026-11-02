@@ -25,6 +25,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api/v1': `http://localhost:${apiPort}`,
+      '/mcp': `http://localhost:${apiPort}`,
     },
   },
 });

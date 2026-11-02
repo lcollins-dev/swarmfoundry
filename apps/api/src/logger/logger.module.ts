@@ -7,8 +7,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { ConfigService } from '../config/config.service';
 
-import { serializeError, serializeReceivedRequest } from '@/logger/log-serializers';
 import { IPinoRfsOptions } from '@/logger/transports/pino-rfs';
+import { serializeError, serializeReceivedRequest } from '@/logger/utils/log-serializers.util';
 
 @Global()
 @Module({

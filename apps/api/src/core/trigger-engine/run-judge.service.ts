@@ -6,8 +6,8 @@ import type { Task } from '@/core/task/entities/task.entity';
 import { FoundryConfigService } from '@/core/foundry-config/foundry-config.service';
 import { IssueSourceService } from '@/core/issue-source/issue-source.service';
 
-import type { ITriggerConfig } from '@/core/foundry-config/foundry-config.types';
-import { RunEndReason, RunOutcome, type IRunJudgement } from '@/core/task/task.types';
+import type { ITriggerConfig } from '@/core/foundry-config/types/foundry-config.types';
+import { RunEndReason, RunOutcome, type IRunJudgement } from '@/core/task/types/task.types';
 
 /** The waits between reads of the issue's labels, so a short GitLab outage cannot fail a finished run. */
 export const LABEL_READ_DELAYS_MS: readonly number[] = [10_000, 60_000];

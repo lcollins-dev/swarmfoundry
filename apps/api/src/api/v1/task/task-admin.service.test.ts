@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { RunEndReason, RunOutcome, StepList, TaskStatus, TranscriptEventType } from '@libs/dto';
+import { RunEndReason, RunOutcome, StepList, TaskStatus, TranscriptDirection, TranscriptEventType } from '@libs/dto';
 
 import { ConfigRevision } from '@/core/foundry-config/entities/config-revision.entity';
 import { Run } from '@/core/task/entities/run.entity';
@@ -11,7 +11,7 @@ import { TaskAdminService, TRANSCRIPT_PAGE_EVENTS, TRANSCRIPT_PAGE_LINES } from 
 import { ConfigService } from '@/config/config.service';
 import { TaskReadService, type IRunTotals } from '@/core/task/task-read.service';
 
-import { ConfigRevisionStatus } from '@/core/foundry-config/foundry-config.types';
+import { ConfigRevisionStatus } from '@/core/foundry-config/types/foundry-config.types';
 
 const PAGE_SIZE = 20;
 const QUEUED = new Date('2026-10-26T09:00:00Z');
@@ -114,8 +114,8 @@ const agentRun = (): Run => {
   return run;
 };
 
-const totals: IRunTotals = { runCount: 2, startDate: STARTED, totalTokens: 908040, costUsd: 1.23 };
-const noRuns: IRunTotals = { runCount: 0, startDate: null, totalTokens: null, costUsd: null };
+const totals: IRunTotals = { runCount: 2, startDate: STARTED, totalTokens: 908040, costUsd: 1.23, furthestStep: 1 };
+const noRuns: IRunTotals = { runCount: 0, startDate: null, totalTokens: null, costUsd: null, furthestStep: null };
 
 describe('TaskAdminService', () => {
   let service: TaskAdminService;
@@ -124,6 +124,7 @@ describe('TaskAdminService', () => {
     findTaskWithThrow: ReturnType<typeof vi.fn>;
     findRunWithThrow: ReturnType<typeof vi.fn>;
     readTranscript: ReturnType<typeof vi.fn>;
+    readTranscriptBefore: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
@@ -132,6 +133,7 @@ describe('TaskAdminService', () => {
       findTaskWithThrow: vi.fn(),
       findRunWithThrow: vi.fn(),
       readTranscript: vi.fn(),
+      readTranscriptBefore: vi.fn(),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -186,6 +188,7 @@ describe('TaskAdminService', () => {
           list: StepList.STEPS,
           step: 1,
           runCount: 2,
+          furthestStep: 1,
           totalTokens: 908040,
           costUsd: 1.23,
           configSha: 'a41c9e2',
@@ -303,18 +306,55 @@ describe('TaskAdminService', () => {
   });
 
   describe('getTranscript', () => {
-    it('reads a page from the line asked for, of the types asked for', async () => {
-      const page = { events: [], nextLine: 4, hasMore: false };
+    const page = { events: [], firstLine: 4, hasEarlier: true, nextLine: 4, hasMore: false };
+    const limits = { eventLimit: TRANSCRIPT_PAGE_EVENTS, lineLimit: TRANSCRIPT_PAGE_LINES };
+
+    it('reads a page forward from the line asked for, of the types asked for', async () => {
       taskReadService.readTranscript.mockResolvedValue(page);
 
-      const response = await service.getTranscript(40, { fromLine: 4, types: [TranscriptEventType.RESULT] });
-
-      expect(taskReadService.readTranscript).toHaveBeenCalledWith(40, {
+      const response = await service.getTranscript(40, {
+        direction: TranscriptDirection.FORWARD,
         fromLine: 4,
         types: [TranscriptEventType.RESULT],
-        eventLimit: TRANSCRIPT_PAGE_EVENTS,
-        lineLimit: TRANSCRIPT_PAGE_LINES,
       });
+
+      expect(taskReadService.readTranscript).toHaveBeenCalledWith(40, {
+        ...limits,
+        fromLine: 4,
+        types: [TranscriptEventType.RESULT],
+      });
+      expect(response).toBe(page);
+    });
+
+    it('reads forward from the first line when none is asked for', async () => {
+      taskReadService.readTranscript.mockResolvedValue(page);
+
+      await service.getTranscript(40, { direction: TranscriptDirection.FORWARD });
+
+      expect(taskReadService.readTranscript).toHaveBeenCalledWith(40, { ...limits, fromLine: 1, types: undefined });
+    });
+
+    it('reads a page backward from the line asked for, or from the end', async () => {
+      taskReadService.readTranscriptBefore.mockResolvedValue(page);
+
+      const response = await service.getTranscript(40, {
+        direction: TranscriptDirection.BACKWARD,
+        beforeLine: 9,
+        types: [TranscriptEventType.TOOL_CALL],
+      });
+      await service.getTranscript(40, { direction: TranscriptDirection.BACKWARD });
+
+      expect(taskReadService.readTranscriptBefore).toHaveBeenNthCalledWith(1, 40, {
+        ...limits,
+        beforeLine: 9,
+        types: [TranscriptEventType.TOOL_CALL],
+      });
+      expect(taskReadService.readTranscriptBefore).toHaveBeenNthCalledWith(2, 40, {
+        ...limits,
+        beforeLine: null,
+        types: undefined,
+      });
+      expect(taskReadService.readTranscript).not.toHaveBeenCalled();
       expect(response).toBe(page);
     });
   });

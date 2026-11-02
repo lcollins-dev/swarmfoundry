@@ -21,3 +21,17 @@ export const getTranscript = (
   runId: number,
   query: Record<string, string | number> = {}
 ) => request(app.getHttpServer()).get(`/api/v1/admin/run/${runId}/transcript`).query(query).set(authHeaders(token));
+
+export const streamTranscript = (
+  app: NestExpressApplication,
+  token: string,
+  runId: number,
+  options: { lastEventId?: string; types?: string } = {}
+) => {
+  const stream = request(app.getHttpServer())
+    .get(`/api/v1/admin/run/${runId}/transcript/stream`)
+    .query(options.types === undefined ? {} : { types: options.types })
+    .set(authHeaders(token));
+
+  return options.lastEventId === undefined ? stream : stream.set('Last-Event-ID', options.lastEventId);
+};

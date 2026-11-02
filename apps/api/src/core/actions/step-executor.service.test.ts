@@ -5,8 +5,8 @@ import type { AgentActionService } from './agent-action.service';
 import type { IssueActionService } from './issue-action.service';
 import { StepExecutorService } from './step-executor.service';
 
-import type { IStepConfig } from '@/core/foundry-config/foundry-config.types';
-import { RunEndReason, RunOutcome, type IRunReport } from '@/core/task/task.types';
+import type { IStepConfig } from '@/core/foundry-config/types/foundry-config.types';
+import { RunEndReason, RunOutcome, type IRunReport } from '@/core/task/types/task.types';
 
 const CLEAN: IRunReport = { exitCode: 0, result: null, error: null };
 const FAILED: IRunReport = { exitCode: 1, result: null, error: null };

@@ -5,16 +5,17 @@ import * as bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { UserRoleId } from '@libs/dto';
+import { PASSWORD_LINK_INVALID_MESSAGE, PasswordLinkState, UserRoleId } from '@libs/dto';
 
+import { PasswordLink } from '@/core/user/entities/password-link.entity';
 import { UserRole } from '@/core/user/entities/user-role.entity';
 import { UserUserRole } from '@/core/user/entities/user-user-role.entity';
 import { User } from '@/core/user/entities/user.entity';
 
 import { ConfigService } from '@/config/config.service';
+import { PasswordLinkService } from '@/core/user/password-link.service';
 import { TokenService } from '@/core/user/token.service';
 import { ACCOUNT_DISABLED_MESSAGE, SESSION_EXPIRED_MESSAGE, UserService } from '@/core/user/user.service';
-import { EmailService, EmailTemplate } from '@/email/email.service';
 
 vi.mock('bcryptjs', () => ({
   hash: vi.fn(),
@@ -100,7 +101,11 @@ describe('UserService', () => {
   let userUserRoleRepository: IRepositoryMock;
   let createTokenMock: ReturnType<typeof vi.fn>;
   let decodeTokenMock: ReturnType<typeof vi.fn>;
-  let sendEmailMock: ReturnType<typeof vi.fn>;
+  let passwordLinkServiceMock: {
+    check: ReturnType<typeof vi.fn>;
+    consume: ReturnType<typeof vi.fn>;
+    revoke: ReturnType<typeof vi.fn>;
+  };
   let configMock: { userPasswordHashRounds: number; userIdleTimeout: string; webAppBaseUrl: string };
 
   beforeEach(async () => {
@@ -109,7 +114,11 @@ describe('UserService', () => {
     userUserRoleRepository = makeRepoMock();
     createTokenMock = vi.fn();
     decodeTokenMock = vi.fn();
-    sendEmailMock = vi.fn().mockResolvedValue(true);
+    passwordLinkServiceMock = {
+      check: vi.fn(),
+      consume: vi.fn().mockResolvedValue(true),
+      revoke: vi.fn().mockResolvedValue(undefined),
+    };
 
     configMock = {
       userPasswordHashRounds: 4,
@@ -127,7 +136,7 @@ describe('UserService', () => {
       providers: [
         UserService,
         { provide: ConfigService, useValue: configMock },
-        { provide: EmailService, useValue: { sendEmail: sendEmailMock } },
+        { provide: PasswordLinkService, useValue: passwordLinkServiceMock },
         { provide: TokenService, useValue: { createToken: createTokenMock, decodeToken: decodeTokenMock } },
         { provide: getRepositoryToken(User), useValue: userRepository },
         { provide: getRepositoryToken(UserRole), useValue: userRoleRepository },
@@ -142,14 +151,12 @@ describe('UserService', () => {
     vi.useRealTimers();
   });
 
-  describe('createUser', () => {
+  describe('invite', () => {
     it('normalizes the email before checking for duplicates', async () => {
       userRepository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(buildUser());
-      userRepository.insert.mockResolvedValue(undefined);
       userRoleRepository.find.mockResolvedValue([]);
-      userUserRoleRepository.delete.mockResolvedValue(undefined);
 
-      await userService.createUser('Tester', '  TESTER@Example.com  ', 'pw', []);
+      await userService.invite('Tester', '  TESTER@Example.com  ', []);
 
       expect(userRepository.findOne).toHaveBeenCalledWith({ where: { email: 'tester@example.com' } });
     });
@@ -157,50 +164,85 @@ describe('UserService', () => {
     it('rejects when a user with the same email already exists', async () => {
       userRepository.findOne.mockResolvedValue(buildUser());
 
-      await expect(userService.createUser('Tester', 'tester@example.com', 'pw', [])).rejects.toThrow(
-        BadRequestException
-      );
+      await expect(userService.invite('Tester', 'tester@example.com', [])).rejects.toThrow(BadRequestException);
 
       expect(userRepository.insert).not.toHaveBeenCalled();
     });
 
-    it('hashes the password using the configured rounds and stores the user', async () => {
+    it('stores the user without a password', async () => {
       userRepository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(buildUser());
-      userRepository.insert.mockResolvedValue(undefined);
       userRoleRepository.find.mockResolvedValue([]);
-      userUserRoleRepository.delete.mockResolvedValue(undefined);
 
-      await userService.createUser('Tester', 'tester@example.com', 'plain-password', []);
+      await userService.invite('Tester', 'tester@example.com', []);
 
-      expect(bcrypt.hash).toHaveBeenCalledWith('plain-password', 4);
+      expect(bcrypt.hash).not.toHaveBeenCalled();
       expect(userRepository.insert).toHaveBeenCalledWith(
-        expect.objectContaining({ email: 'tester@example.com', passwordHash: 'hashed:plain-password' })
+        expect.objectContaining({ email: 'tester@example.com', passwordHash: null })
       );
     });
+  });
 
-    it('sends a welcome email when the flag is set', async () => {
-      userRepository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(buildUser());
-      userRepository.insert.mockResolvedValue(undefined);
-      userRoleRepository.find.mockResolvedValue([]);
-      userUserRoleRepository.delete.mockResolvedValue(undefined);
+  describe('setPasswordWithLink', () => {
+    const validLink = (userOverrides: Partial<User> = {}): PasswordLink => {
+      const passwordLink = new PasswordLink({ tokenHash: 'hash', userId: 1, expiresAt: new Date(Date.now() + 60_000) });
 
-      await userService.createUser('Tester', 'tester@example.com', 'pw', [], true);
+      passwordLink.id = 7;
+      passwordLink.user = buildUser(userOverrides);
 
-      expect(sendEmailMock).toHaveBeenCalledWith('tester@example.com', EmailTemplate.WELCOME, {
-        name: 'Tester',
-        signInUrl: 'https://app.test/sign-in',
-      });
+      return passwordLink;
+    };
+
+    it('refuses a link that is not valid', async () => {
+      passwordLinkServiceMock.check.mockResolvedValue({ state: PasswordLinkState.EXPIRED, passwordLink: null });
+
+      await expect(userService.setPasswordWithLink('token', 'New$Pass1')).rejects.toThrow(
+        PASSWORD_LINK_INVALID_MESSAGE
+      );
+
+      expect(userRepository.update).not.toHaveBeenCalled();
     });
 
-    it('does not send a welcome email by default', async () => {
-      userRepository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(buildUser());
-      userRepository.insert.mockResolvedValue(undefined);
-      userRoleRepository.find.mockResolvedValue([]);
-      userUserRoleRepository.delete.mockResolvedValue(undefined);
+    it('refuses a disabled account', async () => {
+      passwordLinkServiceMock.check.mockResolvedValue({
+        state: PasswordLinkState.VALID,
+        passwordLink: validLink({ enabled: false }),
+      });
 
-      await userService.createUser('Tester', 'tester@example.com', 'pw', []);
+      await expect(userService.setPasswordWithLink('token', 'New$Pass1')).rejects.toThrow(ACCOUNT_DISABLED_MESSAGE);
 
-      expect(sendEmailMock).not.toHaveBeenCalled();
+      expect(passwordLinkServiceMock.consume).not.toHaveBeenCalled();
+      expect(userRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses a link another request used first', async () => {
+      passwordLinkServiceMock.check.mockResolvedValue({ state: PasswordLinkState.VALID, passwordLink: validLink() });
+      passwordLinkServiceMock.consume.mockResolvedValue(false);
+
+      await expect(userService.setPasswordWithLink('token', 'New$Pass1')).rejects.toThrow(
+        PASSWORD_LINK_INVALID_MESSAGE
+      );
+
+      expect(userRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('sets the password, replaces every session and signs the user in', async () => {
+      const passwordLink = validLink({ mustChangePassword: true });
+      passwordLinkServiceMock.check.mockResolvedValue({ state: PasswordLinkState.VALID, passwordLink });
+      createTokenMock.mockResolvedValue('new-token');
+
+      const token = await userService.setPasswordWithLink('token', 'New$Pass1');
+
+      expect(passwordLinkServiceMock.consume).toHaveBeenCalledWith(passwordLink);
+      expect(userRepository.update).toHaveBeenCalledWith(
+        { id: 1 },
+        expect.objectContaining({
+          passwordHash: 'hashed:New$Pass1',
+          mustChangePassword: false,
+          sessionUuid: 'fixed-session-uuid',
+        })
+      );
+      expect(createTokenMock).toHaveBeenCalledWith('fixed-session-uuid');
+      expect(token).toBe('new-token');
     });
   });
 
@@ -228,6 +270,17 @@ describe('UserService', () => {
       await expect(userService.checkLoginWithThrow('tester@example.com', 'wrong-password')).rejects.toThrow(
         BadRequestException
       );
+
+      expect(userRepository.update).toHaveBeenCalledWith(
+        { id: 1 },
+        expect.objectContaining({ lastLoginFail: expect.any(Date) as Date }) as Partial<User>
+      );
+    });
+
+    it('refuses an invited user who has no password yet', async () => {
+      userRepository.findOne.mockResolvedValue(buildUser({ passwordHash: null }));
+
+      await expect(userService.checkLoginWithThrow('tester@example.com', '')).rejects.toThrow(BadRequestException);
 
       expect(userRepository.update).toHaveBeenCalledWith(
         { id: 1 },
@@ -578,13 +631,22 @@ describe('UserService', () => {
       expect(userRepository.update).not.toHaveBeenCalled();
     });
 
-    it('stores the new enabled flag', async () => {
+    it('ends the sessions and revokes the pending link of a disabled user', async () => {
       userRepository.findOne.mockResolvedValue(buildUser());
-      userRepository.update.mockResolvedValue(undefined);
 
       await userService.setEnabled(1, false);
 
-      expect(userRepository.update).toHaveBeenCalledWith({ id: 1 }, { enabled: false });
+      expect(userRepository.update).toHaveBeenCalledWith({ id: 1 }, { enabled: false, sessionUuid: null });
+      expect(passwordLinkServiceMock.revoke).toHaveBeenCalledWith(1);
+    });
+
+    it('enables a user without touching their sessions or links', async () => {
+      userRepository.findOne.mockResolvedValue(buildUser({ enabled: false }));
+
+      await userService.setEnabled(1, true);
+
+      expect(userRepository.update).toHaveBeenCalledWith({ id: 1 }, { enabled: true });
+      expect(passwordLinkServiceMock.revoke).not.toHaveBeenCalled();
     });
   });
 

@@ -41,7 +41,7 @@ cp apps/api/development.env.tpl apps/api/development.env
 npm run instance:start
 ```
 
-This starts Postgres, the API and the web app, and prints the URL. Sign in with `admin@swarmfoundry.test` and
+This starts Postgres, the API and the console, and prints the URL. Sign in with `admin@swarmfoundry.test` and
 `TestPass123!`. Stop it with `npm run instance:stop`.
 
 Other instance commands:

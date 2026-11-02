@@ -254,4 +254,44 @@ describe('usePagedList', () => {
     expect(pagedList.page.value).toBe(1);
     expect(fetchMock).toHaveBeenCalledExactlyOnceWith({ search: 'job 2' }, 1);
   });
+
+  it('moves to the last page that has rows when a refresh leaves the current page past it', async () => {
+    fetchMock.mockResolvedValue({ list: ['twenty'], pages: 2, total: 21 });
+    const { pagedList } = mountList();
+    await settle();
+
+    pagedList.page.value = 2;
+    await settle();
+
+    fetchMock.mockClear();
+    fetchMock.mockImplementation((_request, page) =>
+      Promise.resolve(page === 1 ? { list: ['first'], pages: 1, total: 15 } : { list: [], pages: 1, total: 15 })
+    );
+
+    await pagedList.load();
+    await settle();
+
+    expect(pagedList.page.value).toBe(1);
+    expect(fetchMock.mock.calls).toEqual([
+      [{}, 2],
+      [{}, 1],
+    ]);
+    expect(pagedList.list.value).toEqual(['first']);
+    expect(pagedList.total.value).toBe(15);
+  });
+
+  it('moves to the first page when a refresh leaves the list empty', async () => {
+    const { pagedList } = mountList();
+    await settle();
+
+    pagedList.page.value = 3;
+    await settle();
+
+    fetchMock.mockResolvedValue({ list: [], pages: 0, total: 0 });
+
+    await pagedList.load();
+    await settle();
+
+    expect(pagedList.page.value).toBe(1);
+  });
 });

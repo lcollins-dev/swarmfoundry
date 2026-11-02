@@ -24,7 +24,7 @@ vi.mock('@aws-sdk/client-sesv2', () => ({
 }));
 
 const TEMPLATE_SOURCE =
-  '{{#if subject}}Welcome {{name}}{{/if}}{{#if text}}Hi {{name}}, sign in at {{signInUrl}}{{/if}}' +
+  '{{#if subject}}Welcome {{name}}{{/if}}{{#if text}}Hi {{name}}, sign in at {{link}}{{/if}}' +
   '{{#if html}}<p>Hi {{name}}</p>{{/if}}';
 
 interface IConfigMock {
@@ -86,7 +86,8 @@ describe('EmailService', () => {
 
       service.onApplicationBootstrap();
 
-      expect(lstatSync).toHaveBeenCalledWith(`/srv/templates/${EmailTemplate.WELCOME}`);
+      expect(lstatSync).toHaveBeenCalledWith(`/srv/templates/${EmailTemplate.INVITE}`);
+      expect(lstatSync).toHaveBeenCalledWith(`/srv/templates/${EmailTemplate.PASSWORD_RESET}`);
     });
 
     it('throws when a template path is not a file', async () => {
@@ -107,7 +108,7 @@ describe('EmailService', () => {
 
       expect(() => service.onApplicationBootstrap()).toThrow(InternalServerErrorException);
       expect(errorSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ templatePath: `/srv/templates/${EmailTemplate.WELCOME}` }),
+        expect.objectContaining({ templatePath: `/srv/templates/${EmailTemplate.INVITE}` }),
         'readTemplate(): Failed to read email template'
       );
 
@@ -190,9 +191,10 @@ describe('EmailService', () => {
     it('reports failure rather than throwing when the transport has not been built', async () => {
       const service = await buildService(buildConfigMock());
 
-      const sent = await service.sendEmail('user@example.com', EmailTemplate.WELCOME, {
+      const sent = await service.sendEmail('user@example.com', EmailTemplate.INVITE, {
         name: 'Tester',
-        signInUrl: 'https://app.test',
+        link: 'https://app.test',
+        lifetime: '7 days',
       });
 
       expect(sent).toBe(false);
@@ -202,9 +204,10 @@ describe('EmailService', () => {
       const service = await buildService(buildConfigMock());
       service.onApplicationBootstrap();
 
-      await service.sendEmail('user@example.com', EmailTemplate.WELCOME, {
+      await service.sendEmail('user@example.com', EmailTemplate.INVITE, {
         name: 'Tester',
-        signInUrl: 'https://app.test',
+        link: 'https://app.test',
+        lifetime: '7 days',
       });
 
       expect(sendMailMock).toHaveBeenCalledWith({
@@ -220,9 +223,10 @@ describe('EmailService', () => {
       const service = await buildService(buildConfigMock());
       service.onApplicationBootstrap();
 
-      const sent = await service.sendEmail('user@example.com', EmailTemplate.WELCOME, {
+      const sent = await service.sendEmail('user@example.com', EmailTemplate.INVITE, {
         name: 'Tester',
-        signInUrl: 'https://app.test',
+        link: 'https://app.test',
+        lifetime: '7 days',
       });
 
       expect(sent).toBe(true);
@@ -234,9 +238,10 @@ describe('EmailService', () => {
       const service = await buildService(buildConfigMock());
       service.onApplicationBootstrap();
 
-      const sent = await service.sendEmail('user@example.com', EmailTemplate.WELCOME, {
+      const sent = await service.sendEmail('user@example.com', EmailTemplate.INVITE, {
         name: 'Tester',
-        signInUrl: 'https://app.test',
+        link: 'https://app.test',
+        lifetime: '7 days',
       });
 
       expect(sent).toBe(false);

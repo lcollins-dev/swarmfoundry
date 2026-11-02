@@ -3,7 +3,6 @@ import { setTimeout as sleepFor } from 'node:timers/promises';
 import { z } from 'zod';
 
 import { GitLabApiError } from './gitlab-api.error';
-import type { IRequestLimits } from './issue-source.types';
 import {
   gitlabIssueSchema,
   gitlabLabelEventSchema,
@@ -19,7 +18,8 @@ import {
   type IGitLabProject,
   type IGitLabRelatedIssue,
 } from './schema/gitlab';
-import type { ISourceConfig } from '@/core/foundry-config/foundry-config.types';
+import type { IRequestLimits } from './types/issue-source.types';
+import type { ISourceConfig } from '@/core/foundry-config/types/foundry-config.types';
 
 const PAGE_SIZE = '100';
 const REQUEST_TIMEOUT_MS = 30_000;

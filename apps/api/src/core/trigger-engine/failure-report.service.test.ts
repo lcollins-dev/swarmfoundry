@@ -14,15 +14,24 @@ import { SecretRedactionService } from '@/core/foundry-config/secret-redaction.s
 import type { IssueSourceService } from '@/core/issue-source/issue-source.service';
 import type { TaskService } from '@/core/task/task.service';
 
-import type { IStepConfig, ITriggerConfig } from '@/core/foundry-config/foundry-config.types';
-import { DeploymentFault, RunOutcome, StepList, type IRunJudgement } from '@/core/task/task.types';
+import type { IStepConfig, ITriggerConfig } from '@/core/foundry-config/types/foundry-config.types';
+import { DeploymentFault, RunOutcome, StepList, type IRunJudgement } from '@/core/task/types/task.types';
 
 const SOURCE_TOKEN = 'glpat-orchestrator-token';
 const AGENT_TOKEN = 'sk-ant-oat-agent-token';
 
 const AGENT_STEP = { kind: 'agent', agent: { token: AGENT_TOKEN } } as unknown as IStepConfig;
-const FAILED_LABEL_STEP: IStepConfig = { kind: 'relabel', add: ['foundry::failed'], remove: [] };
-const REPORT_STEP: IStepConfig = { kind: 'comment', body: '{{failure.report}}' };
+const FAILED_LABEL_STEP: IStepConfig = {
+  kind: 'relabel',
+  add: ['foundry::failed'],
+  remove: [],
+  written: { add: ['foundry::failed'], remove: [] },
+};
+const REPORT_STEP: IStepConfig = {
+  kind: 'comment',
+  body: '{{failure.report}}',
+  written: { body: '{{failure.report}}' },
+};
 
 interface ITestTriggerOptions {
   labels?: string[];
@@ -295,7 +304,12 @@ describe('FailureReportService', () => {
     });
 
     it('falls back to adding the trigger label again only where the issue has none of the flags', async () => {
-      const flagStep: IStepConfig = { kind: 'relabel', add: ['foundry::failed', 'foundry::blocked'], remove: [] };
+      const flagStep: IStepConfig = {
+        kind: 'relabel',
+        add: ['foundry::failed', 'foundry::blocked'],
+        remove: [],
+        written: { add: ['foundry::failed', 'foundry::blocked'], remove: [] },
+      };
       const flagged = trigger({ notLabels: ['foundry::failed', 'foundry::blocked'], failureSteps: [flagStep] });
 
       expect(await reportOf(flagged)).toMatch(

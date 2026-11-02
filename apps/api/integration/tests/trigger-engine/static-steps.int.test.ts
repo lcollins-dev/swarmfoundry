@@ -13,7 +13,7 @@ import {
 } from '../../factories/trigger-engine.factory';
 import { bootstrapApp } from '../../setup';
 import { dbQuery } from '../../utils/db';
-import type { IStepConfig, ITriggerConfig } from '@/core/foundry-config/foundry-config.types';
+import type { IStepConfig, ITriggerConfig } from '@/core/foundry-config/types/foundry-config.types';
 
 interface IRunRow {
   list: string;
@@ -25,8 +25,17 @@ interface IRunRow {
 }
 
 const MERGED_STEPS: IStepConfig[] = [
-  { kind: 'relabel', add: ['workflow::test'], remove: ['workflow::review'] },
-  { kind: 'comment', body: 'Merged in !{{mergeRequest.iid}}, ready for test.' },
+  {
+    kind: 'relabel',
+    add: ['workflow::test'],
+    remove: ['workflow::review'],
+    written: { add: ['workflow::test'], remove: ['workflow::review'] },
+  },
+  {
+    kind: 'comment',
+    body: 'Merged in !{{mergeRequest.iid}}, ready for test.',
+    written: { body: 'Merged in !{{mergeRequest.iid}}, ready for test.' },
+  },
 ];
 
 describe('Static steps and failureSteps (integration)', () => {

@@ -4,9 +4,9 @@ import type { Run } from '@/core/task/entities/run.entity';
 
 import { ActionRegistryService } from './action-registry.service';
 
-import type { IActionAgent, IFailureMessage, IStepRequest } from './actions.types';
-import type { IStepConfig } from '@/core/foundry-config/foundry-config.types';
-import { RunEndReason, RunOutcome, type IRunJudgement, type IRunReport } from '@/core/task/task.types';
+import type { IActionAgent, IFailureMessage, IStepRequest } from './types/actions.types';
+import type { IStepConfig } from '@/core/foundry-config/types/foundry-config.types';
+import { RunEndReason, RunOutcome, type IRunJudgement, type IRunReport } from '@/core/task/types/task.types';
 
 export type StepAfter = { kind: 'next'; index: number } | { kind: 'end'; judgement: IRunJudgement };
 

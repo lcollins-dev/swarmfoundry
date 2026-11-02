@@ -5,6 +5,9 @@ import type { Run } from '@/core/task/entities/run.entity';
 import { FoundryConfigService } from '@/core/foundry-config/foundry-config.service';
 import { TaskService } from '@/core/task/task.service';
 
+import { assistantMessageSchema } from './schema/assistant-message';
+import { parseJsonLine } from './schema/json-line';
+import { runResultSchema } from './schema/run-result';
 import {
   AGENT_RUNNER,
   type IActionAgent,
@@ -12,12 +15,9 @@ import {
   type IAgentRunner,
   type IAgentRunRequest,
   type IFailureMessage,
-} from './actions.types';
-import { assistantMessageSchema } from './schema/assistant-message';
-import { parseJsonLine } from './schema/json-line';
-import { runResultSchema } from './schema/run-result';
-import type { IAgentStepConfig } from '@/core/foundry-config/foundry-config.types';
-import { DeploymentFault, RunOutcome, type IRunJudgement, type IRunReport } from '@/core/task/task.types';
+} from './types/actions.types';
+import type { IAgentStepConfig } from '@/core/foundry-config/types/foundry-config.types';
+import { DeploymentFault, RunOutcome, type IRunJudgement, type IRunReport } from '@/core/task/types/task.types';
 
 const RESULT_DETAIL_MAX_LENGTH = 500;
 

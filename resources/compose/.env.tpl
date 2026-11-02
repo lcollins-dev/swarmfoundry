@@ -20,7 +20,6 @@ ANTHROPIC_API_KEY=
 
 #SWARMFOUNDRY_CONFIG_DIR=./config
 
-# With repository config, the agent image still builds from the local config directory's agent/Dockerfile.
 #SWARMFOUNDRY_CONFIG_REPO=https://gitlab.example.com/group/swarmfoundry-config.git
 #SWARMFOUNDRY_CONFIG_BRANCH=main
 #SWARMFOUNDRY_CONFIG_PATH=

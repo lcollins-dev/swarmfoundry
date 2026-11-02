@@ -14,10 +14,10 @@ import {
 import { Run } from './run.entity';
 import { ConfigRevision } from '@/core/foundry-config/entities/config-revision.entity';
 
-import { StepList, TaskStatus, type ITaskMergeRequest } from '../task.types';
+import { StepList, TaskStatus, type ITaskMergeRequest } from '../types/task.types';
 import { ColumnNumericTransformer } from '@/common/transformers/ColumnNumericTransformer';
-import type { MergeRequestEventKind } from '@/core/foundry-config/foundry-config.types';
-import type { IIssue, IIssueChange, IssueChangeKind } from '@/core/issue-source/issue-source.types';
+import type { MergeRequestEventKind } from '@/core/foundry-config/types/foundry-config.types';
+import type { IIssue, IIssueChange, IssueChangeKind } from '@/core/issue-source/types/issue-source.types';
 
 const CHANGE_COLUMNS = '"changeKind", "changeId", "changeDate"';
 

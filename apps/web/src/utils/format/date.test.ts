@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { formatDate, formatDay, formatDayTime, formatDuration, formatRelativeDate, toIsoDate } from './date';
+import {
+  formatDate,
+  formatDay,
+  formatCompactDuration,
+  formatDayTime,
+  formatDuration,
+  formatRelativeDate,
+  toIsoDate,
+} from './date';
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -113,5 +121,16 @@ describe('toIsoDate', () => {
 
   it('reads the local calendar day rather than the utc one', () => {
     expect(toIsoDate(new Date(2026, 4, 15, 23, 59))).toBe('2026-05-15');
+  });
+});
+
+describe('formatCompactDuration', () => {
+  it('shows at most two units, dropping a trailing zero unit', () => {
+    expect(formatCompactDuration(-500)).toBe('0s');
+    expect(formatCompactDuration(12_400)).toBe('12s');
+    expect(formatCompactDuration(185_000)).toBe('3m 05s');
+    expect(formatCompactDuration(45 * 60_000)).toBe('45m');
+    expect(formatCompactDuration(64 * 60_000 + 20_000)).toBe('1h 04m');
+    expect(formatCompactDuration(120 * 60_000)).toBe('2h');
   });
 });

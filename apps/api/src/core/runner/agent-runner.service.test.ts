@@ -46,10 +46,14 @@ import type {
   IServiceContainerOptions,
   SandboxRole,
   StopSignal,
-} from './runner.types';
-import type { IAgentRunRequest } from '@/core/actions/actions.types';
-import type { IAgentStepConfig, IPromptContext, ITriggerConfig } from '@/core/foundry-config/foundry-config.types';
-import { DeploymentFault, RunEndReason, StepList } from '@/core/task/task.types';
+} from './types/runner.types';
+import type { IAgentRunRequest } from '@/core/actions/types/actions.types';
+import type {
+  IAgentStepConfig,
+  IPromptContext,
+  ITriggerConfig,
+} from '@/core/foundry-config/types/foundry-config.types';
+import { DeploymentFault, RunEndReason, StepList } from '@/core/task/types/task.types';
 
 const AGENT_TOKEN = 'sk-ant-oat-agent-token';
 const GITLAB_TOKEN = 'glpat-agent-gitlab';

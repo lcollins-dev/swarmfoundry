@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 
 import { SecretRedactionService } from './secret-redaction.service';
 
-import type { IConfigRepo } from './foundry-config.types';
+import type { IConfigRepo } from './types/foundry-config.types';
 
 export const GIT_TIMEOUT_MS = 60_000;
 
@@ -125,6 +125,18 @@ export class ConfigRepoGitService {
     await rm(env.GIT_INDEX_FILE, { force: true });
 
     return true;
+  }
+
+  /** The file at `path` in the commit, as written. Null when the commit has no file there. */
+  async readFile(repo: IConfigRepo, sha: string, path: string, signal: AbortSignal): Promise<string | null> {
+    const object = `${sha}:${path}`;
+    const type = await this.git(repo, ['cat-file', '-t', object], signal, { exitCodes: [0, 128] });
+
+    if (type.exitCode !== 0 || type.stdout.trim() !== 'blob') {
+      return null;
+    }
+
+    return (await this.git(repo, ['cat-file', 'blob', object], signal)).stdout;
   }
 
   async setRef(repo: IConfigRepo, ref: string, sha: string, signal: AbortSignal): Promise<void> {

@@ -96,26 +96,6 @@ describe('useUserStore', () => {
     expect(userStore.sessionEnded).toBe(false);
   });
 
-  it('leaves the registration flag unknown until it is set', () => {
-    const userStore = useUserStore();
-
-    expect(userStore.canRegister).toBeNull();
-
-    userStore.setCanRegister(true);
-
-    expect(userStore.canRegister).toBe(true);
-  });
-
-  it('keeps the registration flag across a clearAuth', () => {
-    const userStore = useUserStore();
-    userStore.setCanRegister(true);
-    userStore.setToken('signed-jwt');
-
-    userStore.clearAuth();
-
-    expect(userStore.canRegister).toBe(true);
-  });
-
   describe('hasRole', () => {
     it('returns false when there is no profile', () => {
       const userStore = useUserStore();

@@ -5,14 +5,23 @@ import { GitLabSourceService } from './gitlab-source.service';
 import { SourceWatermarkService } from './source-watermark.service';
 import { FoundryConfigService } from '@/core/foundry-config/foundry-config.service';
 
-import type { IIssueSource, IIssueState, IRequestLimits, SourceEventHandler } from './issue-source.types';
-import type { ISourceConfig } from '@/core/foundry-config/foundry-config.types';
+import { errorText } from './gitlab-api.error';
+import type {
+  IIssueSource,
+  IIssueState,
+  IRequestLimits,
+  ISourcePollStatus,
+  SourceEventHandler,
+} from './types/issue-source.types';
+import type { ISourceConfig } from '@/core/foundry-config/types/foundry-config.types';
 
 interface ISourceLoop {
   source: ISourceConfig;
   controller: AbortController;
   timer: NodeJS.Timeout | null;
   poll: Promise<void> | null;
+  lastPoll: ISourcePollStatus['lastPoll'];
+  nextPollDate: Date | null;
 }
 
 @Injectable()
@@ -82,6 +91,15 @@ export class IssueSourceService implements BeforeApplicationShutdown {
     await Promise.all([...this.loops.values()].map(loop => this.stopLoop(loop)));
   }
 
+  /** Each source of the running config, as its poll loop last saw it. Held in memory, since a restart polls at once. */
+  pollStatus(): ISourcePollStatus[] {
+    return this.foundryConfigService.sources.map(source => {
+      const loop = this.loops.get(source.name);
+
+      return { source, lastPoll: loop?.lastPoll ?? null, nextPollDate: loop?.nextPollDate ?? null };
+    });
+  }
+
   /** Reads the issue with the source's own token. Null when it no longer exists. */
   readIssue(
     source: ISourceConfig,
@@ -137,7 +155,7 @@ export class IssueSourceService implements BeforeApplicationShutdown {
     for (const [name, loop] of this.loops) {
       const source = sources.get(name);
 
-      if (source !== undefined && isDeepStrictEqual(source, loop.source)) {
+      if (source !== undefined && this.isSameSource(source, loop.source)) {
         continue;
       }
 
@@ -162,6 +180,11 @@ export class IssueSourceService implements BeforeApplicationShutdown {
     }
 
     await this.retainWatermarks();
+  }
+
+  /** Compares resolved values only, so a revision that rewrites one as a `${VAR}` of the same value keeps the loop. */
+  private isSameSource(left: ISourceConfig, right: ISourceConfig): boolean {
+    return isDeepStrictEqual({ ...left, written: null }, { ...right, written: null });
   }
 
   /**
@@ -196,7 +219,14 @@ export class IssueSourceService implements BeforeApplicationShutdown {
       'startLoop(): Polling the source'
     );
 
-    const loop: ISourceLoop = { source, controller: new AbortController(), timer: null, poll: null };
+    const loop: ISourceLoop = {
+      source,
+      controller: new AbortController(),
+      timer: null,
+      poll: null,
+      lastPoll: null,
+      nextPollDate: null,
+    };
     this.loops.set(source.name, loop);
     this.schedule(loop, handler, 0);
   }
@@ -214,8 +244,10 @@ export class IssueSourceService implements BeforeApplicationShutdown {
   }
 
   private schedule(loop: ISourceLoop, handler: SourceEventHandler, delayMs: number): void {
+    loop.nextPollDate = new Date(Date.now() + delayMs);
     loop.timer = setTimeout(() => {
       loop.timer = null;
+      loop.nextPollDate = null;
       loop.poll = this.pollThenReschedule(loop, handler).finally(() => {
         loop.poll = null;
       });
@@ -226,9 +258,17 @@ export class IssueSourceService implements BeforeApplicationShutdown {
     const { source, controller } = loop;
 
     try {
-      await this.sourcesByType[source.type].poll(source, handler, controller.signal);
+      const failedProjects = await this.sourcesByType[source.type].poll(source, handler, controller.signal);
+
+      loop.lastPoll = { endDate: new Date(), failedProjects, error: null };
     } catch (error) {
       if (!controller.signal.aborted) {
+        loop.lastPoll = {
+          endDate: new Date(),
+          failedProjects: [],
+          error: this.foundryConfigService.redactText(errorText(error)),
+        };
+
         this.logger.error(
           { source: source.name, error: this.foundryConfigService.redact(String(error)) },
           'pollThenReschedule(): The poll failed unexpectedly'

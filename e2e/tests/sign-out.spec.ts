@@ -18,7 +18,7 @@ test.describe('sign out', () => {
     await expect(page).toHaveURL(/\/sign-in/);
     await expect(page.getByText('Signed out', { exact: true })).toBeVisible();
 
-    await page.goto(webRoute('/dashboard'));
+    await page.goto(webRoute('/overview'));
 
     await expect(page).toHaveURL(/\/sign-in/);
   });

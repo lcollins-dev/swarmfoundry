@@ -12,8 +12,8 @@ import type { FoundryConfigService } from '@/core/foundry-config/foundry-config.
 import type { IssueSourceService } from '@/core/issue-source/issue-source.service';
 import type { TaskService } from '@/core/task/task.service';
 
-import type { ITriggerConfig } from '@/core/foundry-config/foundry-config.types';
-import type { IIssueEvent, IMergeRequestEvent, SourceEventHandler } from '@/core/issue-source/issue-source.types';
+import type { ITriggerConfig } from '@/core/foundry-config/types/foundry-config.types';
+import type { IIssueEvent, IMergeRequestEvent, SourceEventHandler } from '@/core/issue-source/types/issue-source.types';
 
 const LABEL = 'workflow::in-progress';
 

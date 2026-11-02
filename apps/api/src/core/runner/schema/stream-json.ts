@@ -43,18 +43,3 @@ export const bashToolUseSchema = z.looseObject({
   name: z.literal('Bash'),
   input: z.looseObject({ command: z.string() }),
 });
-
-/** A prompt's content is a string, which reads as no blocks. */
-export const userSchema = z.looseObject({
-  type: z.literal('user'),
-  message: z.looseObject({ content: z.array(z.unknown()).catch([]) }),
-});
-
-export const toolResultSchema = z.looseObject({
-  type: z.literal('tool_result'),
-  tool_use_id: z.string(),
-  content: z
-    .union([z.string(), z.array(z.looseObject({ text: z.string().optional() }))])
-    .transform(content => (typeof content === 'string' ? content : content.map(part => part.text ?? '').join('\n')))
-    .catch(''),
-});

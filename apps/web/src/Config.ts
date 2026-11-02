@@ -11,4 +11,7 @@ export class Config {
   public static readonly API_TIMEOUT_MS = 15000;
 
   public static readonly LIST_DEBOUNCE_MS = 400;
+
+  public static readonly LIVE_REFRESH_MS = 5000;
+  public static readonly LIVE_STALE_MS = 15000;
 }

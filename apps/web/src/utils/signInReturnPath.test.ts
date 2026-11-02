@@ -27,9 +27,8 @@ describe('signInReturnPath', () => {
     expect(signInReturnPath({ redirect: 'admin' })).toBeUndefined();
   });
 
-  it('refuses the sign in and register pages themselves', () => {
+  it('refuses the sign in page itself', () => {
     expect(signInReturnPath({ redirect: '/sign-in' })).toBeUndefined();
     expect(signInReturnPath({ redirect: '/sign-in/?redirect=/admin' })).toBeUndefined();
-    expect(signInReturnPath({ redirect: '/Register' })).toBeUndefined();
   });
 });

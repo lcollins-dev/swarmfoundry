@@ -9,17 +9,24 @@ import { NO_AUTH_METADATA_KEY } from '../decorators/no-auth.decorator';
 
 import { User } from '@/core/user/entities/user.entity';
 
+import { ApiKeyService } from '@/core/api-key/api-key.service';
 import { NOT_ALLOWED_MESSAGE, SESSION_EXPIRED_MESSAGE, UserService } from '@/core/user/user.service';
 
-export const SETUP_REQUIRED_MESSAGE = 'Set a new password before doing anything else.';
+export const SETUP_REQUIRED_MESSAGE = 'Finish setting up your account to continue.';
+export const API_KEY_INVALID_MESSAGE = "This API key isn't valid. Create a new one on the API keys page.";
+export const API_KEY_NOT_ALLOWED_MESSAGE = "An API key can't do that. Sign in to the console instead.";
 
 /** Set on a handler, never a controller, to let an account held to first-time setup call it. */
 export const ALLOWED_DURING_SETUP_METADATA_KEY = 'allowed-during-setup';
 
+/** Set on a handler, never a controller, to let a personal API key call it. */
+export const ALLOW_API_KEY_METADATA_KEY = 'allow-api-key';
+
 export class AuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    @Inject(UserService) private readonly userService: UserService
+    @Inject(UserService) private readonly userService: UserService,
+    @Inject(ApiKeyService) private readonly apiKeyService: ApiKeyService
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -49,7 +56,7 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException(SESSION_EXPIRED_MESSAGE);
     }
 
-    const user = await this.userService.checkToken(authHeader.replace('Bearer ', ''));
+    const user = await this.authenticate(authHeader.replace('Bearer ', ''), context);
     req.user = user;
 
     if (user.mustChangePassword && !this.allowedDuringSetup(context)) {
@@ -79,6 +86,25 @@ export class AuthGuard implements CanActivate {
     }
 
     return true;
+  }
+
+  /** An API key skips the session and its idle timeout, so signing out of the console leaves it working. */
+  private async authenticate(token: string, context: ExecutionContext): Promise<User> {
+    if (!this.apiKeyService.isApiKey(token)) {
+      return this.userService.checkToken(token);
+    }
+
+    const user = await this.apiKeyService.verify(token);
+
+    if (!user) {
+      throw new UnauthorizedException(API_KEY_INVALID_MESSAGE);
+    }
+
+    if (this.reflector.get<boolean | undefined>(ALLOW_API_KEY_METADATA_KEY, context.getHandler()) !== true) {
+      throw new ForbiddenException(API_KEY_NOT_ALLOWED_MESSAGE);
+    }
+
+    return user;
   }
 
   private allowedDuringSetup(context: ExecutionContext): boolean {

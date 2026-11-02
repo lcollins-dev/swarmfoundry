@@ -14,7 +14,7 @@ import { LoggerModule } from './logger/logger.module';
 
 // serve-static tests `path + '/'`, so this covers `/api` too. An unknown api path gets Nest's JSON 404 rather than the
 // web app.
-const WEB_EXCLUDED_PATHS = ['/api/{*path}'];
+const WEB_EXCLUDED_PATHS = ['/api/{*path}', '/mcp'];
 
 @Module({
   imports: [

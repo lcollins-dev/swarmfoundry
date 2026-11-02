@@ -1,8 +1,7 @@
-import { createTestUser, uniqueEmail } from '../factories/user.factory';
+import { createTestUser, inviteTestUser, uniqueEmail } from '../factories/user.factory';
 import { expect, test } from '../fixtures/test';
 import { confirmDialog } from '../utils/dialog';
 import { fieldError } from '../utils/fields';
-import { TEST_PASSWORD } from '../utils/users';
 
 test.describe('admin users', () => {
   test('narrows the list to a searched user', async ({ adminUsersPage, request }) => {
@@ -25,52 +24,73 @@ test.describe('admin users', () => {
     await adminUsersPage.search(user.email);
     await adminUsersPage.rowByEmail(user.email).click();
 
-    await expect(page).toHaveURL(new RegExp(`/admin/users/${user.id}$`));
+    await expect(page).toHaveURL(new RegExp(`/users/${user.id}$`));
     await expect(adminUserPage.emailInput).toHaveValue(user.email);
   });
 
-  test('creates a user and lands on the new record', async ({
+  test('invites a user, shows their link once and marks them invited', async ({
     adminUsersPage,
-    adminUserCreatePage,
+    adminUserInvitePage,
     adminUserPage,
     page,
   }) => {
-    const email = uniqueEmail('created');
+    const email = uniqueEmail('invited');
 
     await adminUsersPage.goto();
-    await adminUsersPage.newUserButton.click();
+    await adminUsersPage.inviteUserButton.click();
 
-    await expect(page).toHaveURL(/\/admin\/users\/create$/);
+    await expect(page).toHaveURL(/\/users\/invite$/);
 
-    await adminUserCreatePage.fill({ name: 'Created In E2E', email, password: TEST_PASSWORD });
-    await adminUserCreatePage.createButton.click();
+    await adminUserInvitePage.invite({ name: 'Invited In E2E', email });
 
-    await expect(page).toHaveURL(/\/admin\/users\/\d+$/);
-    await expect(adminUserPage.nameInput).toHaveValue('Created In E2E');
+    await expect(adminUserInvitePage.linkValue).toHaveText(/\/set-password#[0-9a-f]{64}$/);
+
+    await adminUserInvitePage.viewUserButton.click();
+
+    await expect(page).toHaveURL(/\/users\/\d+$/);
     await expect(adminUserPage.emailInput).toHaveValue(email);
+    await expect(adminUserPage.invitedTag).toBeVisible();
+
+    await adminUsersPage.goto();
+    await adminUsersPage.search(email);
+
+    await expect(adminUsersPage.invitedTag(email)).toBeVisible();
   });
 
-  test('shows a refused password under its field', async ({
-    adminUserCreatePage,
+  test('shows a refused email under its field', async ({
+    adminUserInvitePage,
     page,
     allowHttpError,
     allowConsoleError,
   }) => {
-    allowHttpError({ url: /\/api\/v1\/admin\/user$/, status: 400 });
+    allowHttpError({ url: /\/api\/v1\/admin\/user\/invite$/, status: 400 });
 
     // The page logs the refused request through its own logger.
-    allowConsoleError(/pages\/loggedin\/admin\/users\/Create/);
+    allowConsoleError(/pages\/loggedin\/users\/Invite/);
 
-    await adminUserCreatePage.goto();
-    await adminUserCreatePage.fill({
-      name: 'Weak Password',
-      email: uniqueEmail('weak'),
-      password: 'weak',
-    });
-    await adminUserCreatePage.createButton.click();
+    await adminUserInvitePage.goto();
+    await adminUserInvitePage.invite({ name: 'Bad Email', email: 'not-an-email' });
 
-    await expect(fieldError(page, 'new-password')).toContainText('Use at least 6 characters, with a capital letter');
-    await expect(page).toHaveURL(/\/admin\/users\/create$/);
+    await expect(fieldError(page, 'email')).toContainText('Enter a valid email address.');
+    await expect(page).toHaveURL(/\/users\/invite$/);
+  });
+
+  test('makes a reset link for a user', async ({ adminUserPage, request }) => {
+    const user = await createTestUser(request);
+
+    await adminUserPage.goto(user.id);
+    await adminUserPage.passwordLinkButton('Reset password').click();
+
+    await expect(adminUserPage.passwordLinkValue).toHaveText(/\/set-password#[0-9a-f]{64}$/);
+  });
+
+  test('resends the invite of a user who has not chosen a password', async ({ adminUserPage, request }) => {
+    const invited = await inviteTestUser(request);
+
+    await adminUserPage.goto(invited.id);
+    await adminUserPage.passwordLinkButton('Resend invite').click();
+
+    await expect(adminUserPage.passwordLinkValue).toHaveText(/\/set-password#[0-9a-f]{64}$/);
   });
 
   test('renames a user from the detail page', async ({ adminUserPage, page, request }) => {

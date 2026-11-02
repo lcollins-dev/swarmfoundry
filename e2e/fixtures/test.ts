@@ -1,38 +1,41 @@
 import { AdminBatchJobPage } from '../pages/AdminBatchJobPage';
 import { AdminBatchJobsPage } from '../pages/AdminBatchJobsPage';
-import { AdminSysConfigPage } from '../pages/AdminSysConfigPage';
-import { AdminUserCreatePage } from '../pages/AdminUserCreatePage';
+import { AdminUserInvitePage } from '../pages/AdminUserInvitePage';
 import { AdminUserPage } from '../pages/AdminUserPage';
 import { AdminUsersPage } from '../pages/AdminUsersPage';
-import { DashboardPage } from '../pages/DashboardPage';
 import { EditProfilePage } from '../pages/EditProfilePage';
 import { FirstTimeSetupPage } from '../pages/FirstTimeSetupPage';
 import { HeaderMenu } from '../pages/HeaderMenu';
 import { NotificationsPanel } from '../pages/NotificationsPanel';
+import { OverviewPage } from '../pages/OverviewPage';
+import { SetPasswordPage } from '../pages/SetPasswordPage';
 import { SignInPage } from '../pages/SignInPage';
 import { test as base } from './error-guards';
 
 interface IPageFixtures {
   signInPage: SignInPage;
-  dashboardPage: DashboardPage;
+  setPasswordPage: SetPasswordPage;
+  overviewPage: OverviewPage;
   editProfilePage: EditProfilePage;
   firstTimeSetupPage: FirstTimeSetupPage;
   headerMenu: HeaderMenu;
   notificationsPanel: NotificationsPanel;
   adminUsersPage: AdminUsersPage;
-  adminUserCreatePage: AdminUserCreatePage;
+  adminUserInvitePage: AdminUserInvitePage;
   adminUserPage: AdminUserPage;
   adminBatchJobsPage: AdminBatchJobsPage;
   adminBatchJobPage: AdminBatchJobPage;
-  adminSysConfigPage: AdminSysConfigPage;
 }
 
 export const test = base.extend<IPageFixtures>({
   signInPage: async ({ page }, use) => {
     await use(new SignInPage(page));
   },
-  dashboardPage: async ({ page }, use) => {
-    await use(new DashboardPage(page));
+  setPasswordPage: async ({ page }, use) => {
+    await use(new SetPasswordPage(page));
+  },
+  overviewPage: async ({ page }, use) => {
+    await use(new OverviewPage(page));
   },
   editProfilePage: async ({ page }, use) => {
     await use(new EditProfilePage(page));
@@ -49,8 +52,8 @@ export const test = base.extend<IPageFixtures>({
   adminUsersPage: async ({ page }, use) => {
     await use(new AdminUsersPage(page));
   },
-  adminUserCreatePage: async ({ page }, use) => {
-    await use(new AdminUserCreatePage(page));
+  adminUserInvitePage: async ({ page }, use) => {
+    await use(new AdminUserInvitePage(page));
   },
   adminUserPage: async ({ page }, use) => {
     await use(new AdminUserPage(page));
@@ -60,9 +63,6 @@ export const test = base.extend<IPageFixtures>({
   },
   adminBatchJobPage: async ({ page }, use) => {
     await use(new AdminBatchJobPage(page));
-  },
-  adminSysConfigPage: async ({ page }, use) => {
-    await use(new AdminSysConfigPage(page));
   },
 });
 

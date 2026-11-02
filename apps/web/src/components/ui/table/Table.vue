@@ -1,6 +1,6 @@
 <template>
-  <div class="overflow-x-auto">
-    <div class="min-w-160" :style="{ '--table-columns': props.columns }">
+  <div :class="{ 'overflow-x-auto': props.scroll }">
+    <div :style="{ '--table-columns': props.columns, minWidth: `${props.minWidth}px` }">
       <slot />
     </div>
   </div>
@@ -12,6 +12,15 @@ const props = defineProps({
   columns: {
     type: String,
     required: true,
+  },
+  minWidth: {
+    type: Number,
+    default: 640,
+  },
+  /** False leaves scrolling to a parent, so a sticky head sticks to that parent. */
+  scroll: {
+    type: Boolean,
+    default: true,
   },
 });
 </script>

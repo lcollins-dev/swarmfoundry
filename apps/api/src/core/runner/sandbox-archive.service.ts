@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { posix } from 'node:path';
 import { pack } from 'tar-stream';
 
-import type { ISandboxFile } from './runner.types';
+import type { ISandboxFile } from './types/runner.types';
 
 export const FILE_MODE = 0o444;
 export const DIRECTORY_MODE = 0o555;

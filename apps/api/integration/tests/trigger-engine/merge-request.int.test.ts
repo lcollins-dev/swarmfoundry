@@ -10,7 +10,7 @@ import {
 } from '../../factories/trigger-engine.factory';
 import { bootstrapApp } from '../../setup';
 import { dbQuery } from '../../utils/db';
-import type { ITriggerConfig } from '@/core/foundry-config/foundry-config.types';
+import type { ITriggerConfig } from '@/core/foundry-config/types/foundry-config.types';
 
 interface ITaskRow {
   id: number;

@@ -9,6 +9,15 @@ import { ConfigService } from '@/config/config.service';
 
 import { RunConfigError } from './run-config.error';
 import {
+  containerInspectSchema,
+  containerWaitSchema,
+  dockerErrorSchema,
+  dockerInfoSchema,
+  imageInspectSchema,
+  networkInspectSchema,
+  pullProgressSchema,
+} from './schema/docker';
+import {
   DOCKER_CLIENT,
   SandboxLabel,
   SandboxRole,
@@ -21,18 +30,9 @@ import {
   type ISandboxNetwork,
   type IServiceContainerOptions,
   type StopSignal,
-} from './runner.types';
-import {
-  containerInspectSchema,
-  containerWaitSchema,
-  dockerErrorSchema,
-  dockerInfoSchema,
-  imageInspectSchema,
-  networkInspectSchema,
-  pullProgressSchema,
-} from './schema/docker';
+} from './types/runner.types';
 import { AGENT_AUTH_VARIABLES } from '@/core/foundry-config/schema/environments';
-import { StepList } from '@/core/task/task.types';
+import { StepList } from '@/core/task/types/task.types';
 
 const NOT_FOUND = 404;
 const CONFLICT = 409;

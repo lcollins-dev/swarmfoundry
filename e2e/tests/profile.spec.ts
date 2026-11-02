@@ -27,7 +27,7 @@ test.describe('edit profile', () => {
     await editProfilePage.nameInput.fill('Renamed In E2E');
     await editProfilePage.saveButton.click();
 
-    await expect(page.getByText('Your changes have been saved.')).toBeVisible();
+    await expect(page.getByText('Profile updated')).toBeVisible();
 
     await page.reload();
 
@@ -38,7 +38,6 @@ test.describe('edit profile', () => {
   test('stays signed in after the user changes their own password', async ({
     signInPage,
     editProfilePage,
-    dashboardPage,
     page,
     request,
   }) => {
@@ -52,10 +51,10 @@ test.describe('edit profile', () => {
     await expect(page.getByText('Password changed')).toBeVisible();
 
     // The password change replaces the session, so this only holds if the app swapped tokens.
-    await dashboardPage.goto();
+    await page.reload();
 
-    await expect(page).toHaveURL(/\/dashboard$/);
-    await expect(dashboardPage.heading).toBeVisible();
+    await expect(page).toHaveURL(/\/edit-profile$/);
+    await expect(editProfilePage.nameInput).toBeVisible();
   });
 
   test('reports mismatched passwords without calling the api', async ({

@@ -12,8 +12,8 @@ import { SandboxService } from './sandbox.service';
 import { FoundryConfigModule } from '@/core/foundry-config/foundry-config.module';
 import { TaskModule } from '@/core/task/task.module';
 
-import { DOCKER_CLIENT } from './runner.types';
-import { AGENT_RUNNER } from '@/core/actions/actions.types';
+import { DOCKER_CLIENT } from './types/runner.types';
+import { AGENT_RUNNER } from '@/core/actions/types/actions.types';
 
 @Module({
   imports: [FoundryConfigModule, TaskModule],
